@@ -459,10 +459,9 @@ class Storage
                 $name = $file['name'];
 
                 if (!empty($params['encryptName'])) {
-                    if (is_string($params['encryptName']))
-                        $name = is_string($params['encryptName'])
-                            ? static::generatePath($params['encryptName'], $name)
-                            : static::uniqueHashedName($name);
+                    $name = is_string($params['encryptName'])
+                        ? static::generatePath($params['encryptName'], $name)
+                        : static::uniqueHashedName($name);
                 }
 
                 if ($contents !== false) {
