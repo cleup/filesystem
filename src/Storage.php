@@ -453,7 +453,7 @@ class Storage
                 : $path;
         }
 
-        if ($prepareResponse['status'] || ($params['ingoreErrors'] ?? false)) {
+        if ($prepareResponse['status'] || ($params['ignoreErrors'] ?? false)) {
             foreach ($prepareResponse['prepared'] as $key => $file) {
                 $contents = @file_get_contents($file['tmp_name']);
                 $name = $file['name'];
