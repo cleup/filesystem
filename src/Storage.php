@@ -320,12 +320,14 @@ class Storage
         $toUpload = [];
         $response = [];
         $params = array_merge([
-            'maxSize' => static::getConfig('maxSize', 15000),          // Maximum file size (KB)
+            'maxSize' => static::getConfig('maxSize', 15000000),       // Maximum file size (Bytes)
+            'minSize' => static::getConfig('minSize', 0),              // Minimum file size (Bytes)
             'mimeType' => [],                                          // Valid mime type
             'extension' => [],                                         // Available file extensions
             'multiple' => false,                                       // Multiple file uploads
             'limit' => static::getConfig('limit', 5),                  // Maximum number of files to upload
             'allowUpload' => static::getConfig('allowUpload', true),   // Allow file upload
+            'calculateRealSize' => true                                // Сalculate the real file size
         ], $params);
 
         if (is_array($files) && !empty($files)) {
@@ -338,56 +340,72 @@ class Storage
                     foreach ($allFiles as $key => $file) {
                         if (!file_exists($file['tmp_name'])) {
                             static::addResponseError($errors, 'file_not_found', $key, $file['name']);
-                        } elseif (!$params['allowUpload']) {
-                            static::addResponseError(
-                                $errors,
-                                'upload_is_not_available',
-                                $key,
-                                $file['name']
-                            );
-                        } elseif (empty($params['multiple']) && $key > 0) {
-                            static::addResponseError(
-                                $errors,
-                                'multiple_mode_is_not_available',
-                                $key,
-                                $file['name']
-                            );
-                        } elseif ($params['multiple'] && ($key + 1) > intval($params['limit'])) {
-                            static::addResponseError(
-                                $errors,
-                                'multiple_file_upload_limit',
-                                $key,
-                                $file['name']
-                            );
-                        } elseif (
-                            !empty($params['extension']) &&
-                            !static::isExtension($file['name'], $params['extension'])
-                        ) {
-                            static::addResponseError(
-                                $errors,
-                                'incorrect_extension',
-                                $key,
-                                $file['name']
-                            );
-                        } elseif (
-                            !empty($params['mimeType']) &&
-                            !static::isMimeType($params['mimeType'], $file['tmp_name'])
-                        ) {
-                            static::addResponseError(
-                                $errors,
-                                'incorrect_mime_type',
-                                $key,
-                                $file['name']
-                            );
-                        } elseif ($file['size'] > ($params['maxSize'] * 1000)) {
-                            static::addResponseError(
-                                $errors,
-                                'large_file_size',
-                                $key,
-                                $file['name']
-                            );
                         } else {
-                            $toUpload[] = $file;
+                            $file['size'] = $params['calculateRealSize']
+                                ? static::getRealSize($file['tmp_name'])
+                                : $file['size'];
+
+                            if (!$params['allowUpload']) {
+                                static::addResponseError(
+                                    $errors,
+                                    'upload_is_not_available',
+                                    $key,
+                                    $file['name']
+                                );
+                            } elseif (empty($params['multiple']) && $key > 0) {
+                                static::addResponseError(
+                                    $errors,
+                                    'multiple_mode_is_not_available',
+                                    $key,
+                                    $file['name']
+                                );
+                            } elseif ($params['multiple'] && ($key + 1) > intval($params['limit'])) {
+                                static::addResponseError(
+                                    $errors,
+                                    'multiple_file_upload_limit',
+                                    $key,
+                                    $file['name']
+                                );
+                            } elseif (
+                                !empty($params['extension']) &&
+                                !static::isExtension($file['name'], $params['extension'])
+                            ) {
+                                static::addResponseError(
+                                    $errors,
+                                    'incorrect_extension',
+                                    $key,
+                                    $file['name']
+                                );
+                            } elseif (
+                                !empty($params['mimeType']) &&
+                                !static::isMimeType($params['mimeType'], $file['tmp_name'])
+                            ) {
+                                static::addResponseError(
+                                    $errors,
+                                    'incorrect_mime_type',
+                                    $key,
+                                    $file['name']
+                                );
+                            } elseif ($file['size'] > $params['maxSize']) {
+                                static::addResponseError(
+                                    $errors,
+                                    'large_file_size',
+                                    $key,
+                                    $file['name']
+                                );
+                            } elseif (
+                                !$file['size'] ||
+                                ($params['minSize'] && $file['size'] < $params['minSize'])
+                            ) {
+                                static::addResponseError(
+                                    $errors,
+                                    'small_file_size',
+                                    $key,
+                                    $file['name']
+                                );
+                            } else {
+                                $toUpload[] = $file;
+                            }
                         }
                     }
 
@@ -471,6 +489,21 @@ class Storage
         }
 
         return $prepareResponse;
+    }
+
+    /**
+     * Get the real size
+     * 
+     * @param string $path
+     * @return int
+     */
+    public static function getRealSize($path)
+    {
+        $stream = fopen($path, 'r+');
+        $stat = fstat($stream);
+        fclose($stream);
+
+        return $stat['size'] ?? 0;
     }
 
     public static function __callStatic($method, $arguments)

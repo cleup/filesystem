@@ -5,7 +5,6 @@ namespace Cleup\Filesystem;
 use Cleup\Filesystem\Exceptions\DriverMethodException;
 use Cleup\Filesystem\Interfaces\DriverInterface;
 use Cleup\Filesystem\Driver;
-use Cleup\Filesystem\Exceptions\CreateDirectoryException;
 use Cleup\Filesystem\Exceptions\UnregisteredDriverException;
 
 class Filesystem
