@@ -170,28 +170,6 @@ class Storage
     }
 
     /**
-     * Generate a date path
-     * 
-     * @param string $prefix
-     * @param bool $isYear
-     * @param bool $isDay
-     * @param bool $prefix
-     * @return string
-     */
-    public static function generatePathByDate(
-        $prefix = '',
-        $isYear = true,
-        $isMonth = true,
-        $isDay = false
-    ) {
-        $year = $isYear ? '/' . md5(date('Y')) : '';
-        $month = $isMonth ? '/' . md5(date('m')) : '';
-        $day = $isDay ? '/' . md5(date('d')) : '';
-
-        return trim($prefix, '/') .  $year . $month . $day;
-    }
-
-    /**
      * Generate path
      * 
      * @param string $path
