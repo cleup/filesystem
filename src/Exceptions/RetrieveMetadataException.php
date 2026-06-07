@@ -8,95 +8,111 @@ use Cleup\Filesystem\Finder\FileAttributes;
 use RuntimeException;
 use Throwable;
 
+/**
+ * Exception thrown when retrieving file metadata fails.
+ * Used by the file upload library for local, FTP, and SFTP adapters.
+ */
 final class RetrieveMetadataException extends RuntimeException
 {
-    /**
-     * @var string
-     */
-    private $path;
+    private string $path = '';
+    private string $metadataType = '';
+    private string $reason = '';
 
     /**
-     * @var string
+     * @param string $message Error message.
+     * @param int $code Error code.
+     * @param Throwable|null $previous Previous exception.
      */
-    private $metadataType;
+    public function __construct(
+        string $message = "",
+        int $code = 0,
+        ?Throwable $previous = null,
+    ) {
+        parent::__construct($message, $code, $previous);
+    }
 
     /**
-     * @var string
+     * Create an exception for a failed last modified retrieval.
+     *
+     * @param string $path The file path.
+     * @param string $reason Additional reason for the failure.
+     * @param Throwable|null $previous Previous exception.
+     * @return static
      */
-    private $reason;
-
-    /**
-     * @param string $path
-     * @param string $reason
-     * @param ?Throwable $previous
-     * @return self
-     */
-    public static function lastModified($path,  $reason = '', $previous = null)
+    public static function lastModified(string $path, string $reason = '', ?Throwable $previous = null): static
     {
         return static::create(
             $path,
             FileAttributes::ATTRIBUTE_LAST_MODIFIED,
             $reason,
-            $previous
+            $previous,
         );
     }
 
     /**
-     * @param string $path
-     * @param string $reason
-     * @param ?Throwable $previous
-     * @return self
+     * Create an exception for a failed visibility retrieval.
+     *
+     * @param string $path The file path.
+     * @param string $reason Additional reason for the failure.
+     * @param Throwable|null $previous Previous exception.
+     * @return static
      */
-    public static function getVisibility($path, $reason = '',  $previous = null)
+    public static function getVisibility(string $path, string $reason = '', ?Throwable $previous = null): static
     {
         return static::create(
             $path,
             FileAttributes::ATTRIBUTE_VISIBILITY,
             $reason,
-            $previous
+            $previous,
         );
     }
 
     /**
-     * @param string $path
-     * @param string $reason
-     * @param ?Throwable $previous
-     * @return self
+     * Create an exception for a failed file size retrieval.
+     *
+     * @param string $path The file path.
+     * @param string $reason Additional reason for the failure.
+     * @param Throwable|null $previous Previous exception.
+     * @return static
      */
-    public static function size($path, $reason = '', $previous = null)
+    public static function size(string $path, string $reason = '', ?Throwable $previous = null): static
     {
         return static::create(
             $path,
             FileAttributes::ATTRIBUTE_FILE_SIZE,
             $reason,
-            $previous
+            $previous,
         );
     }
 
     /**
-     * @param string $path
-     * @param string $reason
-     * @param ?Throwable $previous
-     * @return self
+     * Create an exception for a failed MIME type retrieval.
+     *
+     * @param string $path The file path.
+     * @param string $reason Additional reason for the failure.
+     * @param Throwable|null $previous Previous exception.
+     * @return static
      */
-    public static function mimeType($path, $reason = '', $previous = null)
+    public static function mimeType(string $path, string $reason = '', ?Throwable $previous = null): static
     {
         return static::create(
             $path,
             FileAttributes::ATTRIBUTE_MIME_TYPE,
             $reason,
-            $previous
+            $previous,
         );
     }
 
     /**
-     * @param string $path
-     * @param string $type
-     * @param string $reason
-     * @param ?Throwable $previous
-     * @return self
+     * Create an exception for a failed metadata retrieval of any type.
+     *
+     * @param string $path The file path.
+     * @param string $type The metadata type being retrieved.
+     * @param string $reason Additional reason for the failure.
+     * @param Throwable|null $previous Previous exception.
+     * @return static
      */
-    public static function create($path, $type, $reason = '', $previous = null)
+    public static function create(string $path, string $type, string $reason = '', ?Throwable $previous = null): static
     {
         $e = new static("Unable to retrieve the $type for file at path: $path. {$reason}", 0, $previous);
         $e->reason = $reason;
@@ -107,33 +123,41 @@ final class RetrieveMetadataException extends RuntimeException
     }
 
     /**
+     * Get the reason for the failure.
+     *
      * @return string
      */
-    public function reason()
+    public function reason(): string
     {
         return $this->reason;
     }
 
     /**
+     * Get the file path that failed.
+     *
      * @return string
      */
-    public function path()
+    public function path(): string
     {
         return $this->path;
     }
 
     /**
+     * Get the metadata type that was being retrieved.
+     *
      * @return string
      */
-    public function metadataType()
+    public function metadataType(): string
     {
         return $this->metadataType;
     }
 
     /**
+     * Get the operation type for this exception.
+     *
      * @return string
      */
-    public function operation()
+    public function operation(): string
     {
         return "RETRIEVE_METADATA";
     }

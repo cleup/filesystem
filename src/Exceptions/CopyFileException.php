@@ -7,27 +7,41 @@ namespace Cleup\Filesystem\Exceptions;
 use RuntimeException;
 use Throwable;
 
+/**
+ * Exception thrown when a file copy operation fails.
+ * Used by the file upload library for local, FTP, and SFTP adapters.
+ */
 final class CopyFileException extends RuntimeException
 {
-    /**
-     * @var string
-     */
-    private $from;
+    private string $from;
+    private string $to;
 
     /**
-     * @var string
+     * @param string $message Error message.
+     * @param int $code Error code.
+     * @param Throwable|null $previous Previous exception.
      */
-    private $to;
+    public function __construct(
+        string $message = "",
+        int $code = 0,
+        ?Throwable $previous = null,
+    ) {
+        parent::__construct($message, $code, $previous);
+    }
 
     /**
+     * Get the source path.
+     *
      * @return string
      */
-    public function from()
+    public function from(): string
     {
         return $this->from;
     }
 
     /**
+     * Get the destination path.
+     *
      * @return string
      */
     public function to(): string
@@ -36,12 +50,14 @@ final class CopyFileException extends RuntimeException
     }
 
     /**
-     * @param string $fromPath
-     * @param string $toPath
-     * @param ?Throwable $previous
+     * Create an exception for a failed copy from one path to another.
+     *
+     * @param string $fromPath Source path.
+     * @param string $toPath Destination path.
+     * @param Throwable|null $previous Previous exception.
      * @return static
      */
-    public static function fromLocationTo($fromPath, $toPath, $previous = null)
+    public static function fromLocationTo(string $fromPath, string $toPath, ?Throwable $previous = null): static
     {
         $e = new static("Unable to copy file from $fromPath to $toPath", 0, $previous);
         $e->from = $fromPath;
@@ -51,26 +67,30 @@ final class CopyFileException extends RuntimeException
     }
 
     /**
-     * @param string $from
-     * @param string $to
+     * Create an exception when source and destination paths are identical.
+     *
+     * @param string $from Source path.
+     * @param string $to Destination path.
      * @return static
      */
-    public static function fromAndToAreTheSame($from, $to)
+    public static function fromAndToAreTheSame(string $from, string $to): static
     {
         return static::because(
             'Source and destination are the same',
             $from,
-            $to
+            $to,
         );
     }
 
     /**
-     * @param string $reason
-     * @param string $fromPath
-     * @param string $toPath
+     * Create an exception with a specific reason.
+     *
+     * @param string $reason Reason for the failure.
+     * @param string $fromPath Source path.
+     * @param string $toPath Destination path.
      * @return static
      */
-    public static function because($reason, $fromPath, $toPath)
+    public static function because(string $reason, string $fromPath, string $toPath): static
     {
         $e = new static("Unable to copy file from $fromPath to $toPath, because $reason");
         $e->from = $fromPath;
@@ -80,9 +100,11 @@ final class CopyFileException extends RuntimeException
     }
 
     /**
+     * Get the operation type for this exception.
+     *
      * @return string
      */
-    public function operation()
+    public function operation(): string
     {
         return "COPY";
     }

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Cleup\Filesystem\Drivers;
 
 use Cleup\Filesystem\Adapters\Local\LocalAdapter;
@@ -7,14 +9,18 @@ use Cleup\Filesystem\Driver;
 use Cleup\Filesystem\Filesystem;
 use Cleup\Filesystem\Interfaces\AdapterInterface;
 
+use const LOCK_EX;
+
+/**
+ * Local filesystem driver.
+ * Provides local file storage operations through the Driver abstraction.
+ */
 class LocalDriver extends Driver
 {
     /**
-     * List of default configuration options
-     *
-     * @return array
+     * @inheritDoc
      */
-    protected function configure()
+    protected function configure(): ?array
     {
         return [
             'root' => '',
@@ -32,17 +38,14 @@ class LocalDriver extends Driver
             ],
             Filesystem::OPTION_VISIBILITY => null,
             Filesystem::OPTION_DIRECTORY_VISIBILITY => null,
-            'links' => null
+            'links' => null,
         ];
     }
 
     /**
-     * Create an instance of the local driver.
-     *
-     * @param array $config
-     * @return AdapterInterface
+     * @inheritDoc
      */
-    protected function create()
+    protected function create(): AdapterInterface
     {
         $links = $this->getConfig('links') === 'skip'
             ? LocalAdapter::SKIP_LINKS
@@ -51,12 +54,12 @@ class LocalDriver extends Driver
         $lock = $this->getConfig('lock', false) ? LOCK_EX : 0;
 
         return new LocalAdapter(
-            $this->getConfig('root'),
-            $this->visibilityConverter(),
-            $lock,
-            $links,
-            $this->getConfig('mimeTypeDetector'),
-            $this->getConfig('finderMimeTypeDetect', false),
+            location: $this->getConfig('root'),
+            visibility: $this->visibilityConverter(),
+            writeFlags: $lock,
+            linkHandling: $links,
+            mimeTypeDetector: $this->getConfig('mimeTypeDetector'),
+            finderMimeTypeDetect: $this->getConfig('finderMimeTypeDetect', false),
         );
     }
 }

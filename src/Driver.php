@@ -1,86 +1,62 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Cleup\Filesystem;
 
-use Generator;
-use Throwable;
-use Cleup\Filesystem\Support\VisibilityConverter;
-use Cleup\Filesystem\Adapters\ReadOnly\ReadOnlyAdapter;
-use Cleup\Filesystem\Exceptions\InvalidChecksumAlgoException;
 use Cleup\Filesystem\Exceptions\CopyFileException;
 use Cleup\Filesystem\Exceptions\CreateDirectoryException;
 use Cleup\Filesystem\Exceptions\DeleteDirectoryException;
 use Cleup\Filesystem\Exceptions\DeleteFileException;
-use Cleup\Filesystem\Exceptions\InvalidStreamProvidedException;
 use Cleup\Filesystem\Exceptions\FinderException;
+use Cleup\Filesystem\Exceptions\InvalidChecksumAlgoException;
+use Cleup\Filesystem\Exceptions\InvalidStreamProvidedException;
 use Cleup\Filesystem\Exceptions\MoveFileException;
-use Cleup\Filesystem\Exceptions\ReadFileException;
 use Cleup\Filesystem\Exceptions\RetrieveMetadataException;
 use Cleup\Filesystem\Exceptions\SetVisibilityException;
 use Cleup\Filesystem\Exceptions\WriteFileException;
-use Cleup\Filesystem\Filesystem;
 use Cleup\Filesystem\Finder\Finder;
-use Cleup\Filesystem\Support\PathNormalizer;
-use Cleup\Filesystem\Interfaces\DriverInterface;
-use Cleup\Filesystem\Interfaces\PathNormalizerInterface;
-use Cleup\Filesystem\Support\PathPrefixer;
 use Cleup\Filesystem\Interfaces\AdapterInterface;
+use Cleup\Filesystem\Interfaces\DriverInterface;
 use Cleup\Filesystem\Interfaces\FinderAttributesInterface;
 use Cleup\Filesystem\Interfaces\FinderFileAttributesInterface;
+use Cleup\Filesystem\Support\Path;
+use Cleup\Filesystem\Support\PathPrefixer;
+use Cleup\Filesystem\Support\VisibilityConverter;
+use Generator;
 use Psr\Http\Message\StreamInterface;
+use Throwable;
 
 use function array_key_exists;
 
-class Driver implements DriverInterface
+/**
+ * Base driver for file upload/download operations.
+ * Wraps an adapter with path normalization, configuration, and error handling.
+ */
+abstract class Driver implements DriverInterface
 {
-    /**
-     * @var string
-     */
+    /** @var string */
     public const STRATEGY_IGNORE = 'ignore';
 
-    /**
-     * @var string
-     */
+    /** @var string */
     public const STRATEGY_FAIL = 'fail';
 
-    /**
-     * @var string
-     */
+    /** @var string */
     public const STRATEGY_TRY = 'try';
 
-    /**
-     * @var PathNormalizerInterface
-     */
-    private $pathNormalizer;
+    protected AdapterInterface $adapter;
+    protected PathPrefixer $prefixer;
+
+    /** @var array<string, mixed> */
+    private array $config;
 
     /**
-     * @var AdapterInterface
-     */
-    protected $adapter;
-
-    /**
-     * The Flysystem PathPrefixer instance.
-     *
-     * @var PathPrefixer
-     */
-    protected $prefixer;
-
-    /**
-     * Driver Configuration
-     *
-     * @var array
-     */
-    private $config;
-
-    /**
-     * Create driver
-     * 
-     * @param array $config
-     * @param bool $debug
+     * @param array<string, mixed> $config Driver configuration.
+     * @param bool $debug Enable debug/exception mode.
      */
     public function __construct(
-        $config = [],
-        protected $debug = false
+        array $config = [],
+        protected bool $debug = false,
     ) {
         $separator = $config['directory_separator'] ?? DIRECTORY_SEPARATOR;
 
@@ -96,63 +72,79 @@ class Driver implements DriverInterface
             );
         }
 
-        $defaultConfig = call_user_func([$this, 'configure']) ?? array();
+        $defaultConfig = $this->configure() ?? [];
 
-        if ($defaultConfig)
+        if ($defaultConfig !== []) {
             $config = array_merge($defaultConfig, $config);
+        }
 
         $this->config = $config;
-
         $this->mountDriver();
     }
 
     /**
-     * Get configuration by key
-     * 
-     * @param string $key
-     * @param mixed $default
-     * @return mixed
+     * Configure default options for the driver.
+     * Override in child classes to provide driver-specific defaults.
+     *
+     * @return array<string, mixed>|null
      */
-    public function getConfig($key = null, $default = null)
+    protected function configure(): ?array
     {
-        if (is_null($key))
+        return [];
+    }
+
+    /**
+     * Create the adapter instance for this driver.
+     * Override in child classes to instantiate the specific adapter.
+     *
+     * @return AdapterInterface
+     */
+    abstract protected function create(): AdapterInterface;
+
+    /**
+     * @inheritDoc
+     */
+    public function getConfig(?string $key = null, mixed $default = null): mixed
+    {
+        if ($key === null) {
             return $this->config;
+        }
 
         return $this->config[$key] ?? $default;
     }
 
     /**
-     * @return bool
+     * Check if debug mode is enabled.
      */
-    protected function isDebug()
+    protected function isDebug(): bool
     {
-        return !!$this->debug;
+        return $this->debug;
     }
 
     /**
-     * Use a visibility converter
-     * 
-     * @param VisibilityConverter|null $сonverter
+     * Create or retrieve a visibility converter.
+     *
+     * @param VisibilityConverter|null $converter Optional existing converter.
      * @return VisibilityConverter
      */
-    protected function visibilityConverter($сonverter = null)
+    protected function visibilityConverter(?VisibilityConverter $converter = null): VisibilityConverter
     {
-        return $сonverter ?? VisibilityConverter::fromArray(
+        return $converter ?? VisibilityConverter::fromArray(
             $this->getConfig('permissions', []),
-            $this->getConfig(Filesystem::OPTION_DIRECTORY_VISIBILITY) ??
-                $this->getConfig(Filesystem::OPTION_VISIBILITY) ??
-                Filesystem::VISIBILITY_PRIVATE
+            $this->getConfig(Filesystem::OPTION_DIRECTORY_VISIBILITY)
+                ?? $this->getConfig(Filesystem::OPTION_VISIBILITY)
+                ?? Filesystem::VISIBILITY_PRIVATE
         );
     }
 
     /**
-     * Use only selected elements of the array
-     * 
-     * @param array $arr
-     * @param array $items
-     * @return array
+     * Filter array to only specified keys.
+     *
+     * @param array<string, mixed> $arr
+     * @param array<int, string> $items
+     * @return array<string, mixed>
      */
-    protected function onlyArrayItems($arr, $items = [])
+    protected function onlyArrayItems(array $arr, array $items = []): array
     {
         return array_intersect_key(
             $arr,
@@ -161,11 +153,11 @@ class Driver implements DriverInterface
     }
 
     /**
-     * Get root options
-     * 
-     * @return array
+     * Get root configuration options.
+     *
+     * @return array<string, mixed>
      */
-    private function getRootOptions()
+    private function getRootOptions(): array
     {
         return $this->onlyArrayItems(
             $this->config,
@@ -174,18 +166,18 @@ class Driver implements DriverInterface
                 Filesystem::OPTION_MOVE_IDENTICAL_PATH,
                 Filesystem::OPTION_VISIBILITY,
                 Filesystem::OPTION_DIRECTORY_VISIBILITY,
-                Filesystem::OPTION_RETAIN_VISIBILITY
+                Filesystem::OPTION_RETAIN_VISIBILITY,
             ]
         );
     }
 
     /**
-     * Exclude options from the root configuration array
-     * 
-     * @param string $options
-     * @return array
+     * Exclude specified options from the root configuration.
+     *
+     * @param string ...$options Option keys to exclude.
+     * @return array<string, mixed>
      */
-    public function excludeOptions(...$options)
+    public function excludeOptions(string ...$options): array
     {
         return array_diff_key(
             $this->getRootOptions(),
@@ -194,12 +186,12 @@ class Driver implements DriverInterface
     }
 
     /**
-     * Combining options with the root configuration
-     * 
-     * @param array $options
-     * @return array
+     * Merge custom options with root configuration.
+     *
+     * @param array<string, mixed> $options
+     * @return array<string, mixed>
      */
-    public function сombiningOptions($options)
+    public function combiningOptions(array $options): array
     {
         return array_merge(
             $this->getRootOptions(),
@@ -208,61 +200,33 @@ class Driver implements DriverInterface
     }
 
     /**
-     * Mount the driver
-     * 
-     * @return void
+     * Mount the adapter driver.
      */
-    private function mountDriver()
+    private function mountDriver(): void
     {
-        $adapter = call_user_func([$this, 'create']);
-
-        if ($this->getConfig('readOnly')) {
-            $adapter = new ReadOnlyAdapter($adapter);
-        }
-
-        $this->pathNormalizer = $this->getConfig('pathNormalizer', null)
-            ?? new PathNormalizer();
+        $adapter = $this->create();
 
         $this->adapter = $adapter;
     }
 
     /**
-     * Get the full path to the file that exists at the given relative path.
-     *
-     * @param string $path
-     * @param bool $normalize
-     * @return string
+     * @inheritDoc
      */
-    public function path($path, $normalize = false)
+    public function path(string $path, bool $normalize = false): string
     {
+        $fullPath = $this->prefixer->prefixPath($path);
+
         if ($normalize) {
-            return $this->normalizePath(
-                $this->prefixer->prefixPath($path)
-            );
+            return Path::normalizePath($fullPath);
         }
 
-        return $this->prefixer->prefixPath($path);
+        return $fullPath;
     }
 
     /**
-     * Normalize path
-     * 
-     * @param string $path
-     * @return string
+     * @inheritDoc
      */
-    public function normalizePath($path)
-    {
-        return $this->pathNormalizer->normalizePath($path);
-    }
-
-    /**
-     * Extract the file name from a file path.
-     *
-     * @param string $path
-     * @param bool $pathPrefix
-     * @return string
-     */
-    public function name($path, $pathPrefix = true)
+    public function name(string $path, bool $pathPrefix = true): string
     {
         return pathinfo(
             $pathPrefix ? $this->path($path) : $path,
@@ -271,13 +235,9 @@ class Driver implements DriverInterface
     }
 
     /**
-     * Extract the trailing name component from a file path.
-     *
-     * @param string $path
-     * @param bool $pathPrefix
-     * @return string
+     * @inheritDoc
      */
-    public function basename($path, $pathPrefix = true)
+    public function basename(string $path, bool $pathPrefix = true): string
     {
         return pathinfo(
             $pathPrefix ? $this->path($path) : $path,
@@ -286,13 +246,9 @@ class Driver implements DriverInterface
     }
 
     /**
-     * Extract the parent directory from a file path.
-     *
-     * @param string $path
-     * @param bool $pathPrefix
-     * @return string
+     * @inheritDoc
      */
-    public function dirname($path, $pathPrefix = true)
+    public function dirname(string $path, bool $pathPrefix = true): string
     {
         return pathinfo(
             $pathPrefix ? $this->path($path) : $path,
@@ -301,13 +257,9 @@ class Driver implements DriverInterface
     }
 
     /**
-     * Extract the file extension from a file path.
-     *
-     * @param string $path
-     * @param bool $pathPrefix
-     * @return string
+     * @inheritDoc
      */
-    public function extension($path, $pathPrefix = true)
+    public function extension(string $path, bool $pathPrefix = true): string
     {
         return pathinfo(
             $pathPrefix ? $this->path($path) : $path,
@@ -316,13 +268,9 @@ class Driver implements DriverInterface
     }
 
     /**
-     * Unique hashed name.
-     *
-     * @param string $path
-     * @param bool $isExtension
-     * @return string
+     * @inheritDoc
      */
-    public function uniqueHashedName($path, $isExtension = true)
+    public function uniqueHashedName(string $path, bool $isExtension = true): string
     {
         $name = $this->name($path);
         $extension = $this->extension($path);
@@ -331,157 +279,114 @@ class Driver implements DriverInterface
     }
 
     /**
-     * Determine if a file or directory exists.
-     *
-     * @param string $path
-     * @return bool
+     * @inheritDoc
      */
-    public function exists($path)
+    public function exists(string $path): bool
     {
-        $path = $this->pathNormalizer->normalizePath($path);
+        $path = Path::normalizePath($path);
 
-        return $this->adapter->fileExists($path) ||
-            $this->adapter->directoryExists($path);
+        return $this->adapter->fileExists($path)
+            || $this->adapter->directoryExists($path);
     }
 
     /**
-     * Determine if a file exists.
-     *
-     * @param string $path
-     * @return bool
+     * @inheritDoc
      */
-    public function fileExists($path)
+    public function fileExists(string $path): bool
     {
         return $this->adapter->fileExists(
-            $this->pathNormalizer->normalizePath($path)
+            Path::normalizePath($path)
         );
     }
 
     /**
-     * Determine if a directory exists.
-     *
-     * @param string $path
-     * @return bool
+     * @inheritDoc
      */
-    public function directoryExists($path)
+    public function directoryExists(string $path): bool
     {
         return $this->adapter->directoryExists(
-            $this->pathNormalizer->normalizePath($path)
+            Path::normalizePath($path)
         );
     }
 
     /**
-     * Get the contents of a file.
-     *
-     * @param string  $path
-     * @return string|null
+     * @inheritDoc
      */
-    public function get($path)
+    public function get(string $path): string
     {
-        try {
-            return $this->adapter->get(
-                $this->pathNormalizer->normalizePath($path)
-            );
-        } catch (ReadFileException $exception) {
-            if ($this->isDebug())
-                throw $exception;
-        }
-
-        return null;
+        return $this->adapter->get(
+            Path::normalizePath($path)
+        );
     }
 
     /**
-     * Get a resource to read the file.
-     *
-     * @param string $path
-     * @return resource|null The path resource or null on failure.
+     * @inheritDoc
      */
-    public function readStream($path)
+    public function readStream(string $path): mixed
     {
-        try {
-            return $this->adapter->readStream(
-                $this->pathNormalizer->normalizePath($path)
-            );
-        } catch (ReadFileException $exception) {
-            if ($this->isDebug())
-                throw $exception;
-        }
-
-        return null;
+        return $this->adapter->readStream(
+            Path::normalizePath($path)
+        );
     }
 
     /**
-     * Get the contents of a file as decoded JSON.
-     *
-     * @param string $path
-     * @param int $flags
-     * @return array|null
+     * @inheritDoc
      */
-    public function json($path, $flags = 0)
+    public function json(string $path, int $flags = 0): ?array
     {
         $content = $this->get($path);
 
-        return is_null($content)
-            ? null
-            : json_decode($content, true, 512, $flags);
+        if ($content === null) {
+            return null;
+        }
+
+        return json_decode($content, true, 512, $flags);
     }
 
     /**
-     * Get the file's last modification time.
-     *
-     * @param string $path
-     * @return int
+     * @inheritDoc
      */
-    public function lastModified($path)
+    public function lastModified(string $path): int
     {
         return $this->adapter->lastModified(
-            $this->pathNormalizer->normalizePath($path)
+            Path::normalizePath($path)
         )->lastModified();
     }
 
     /**
-     * Get the file size of a given file.
-     *
-     * @param string $path
-     * @return int
+     * @inheritDoc
      */
-    public function size($path)
+    public function size(string $path): int
     {
         return $this->adapter->size(
-            $this->pathNormalizer->normalizePath($path)
+            Path::normalizePath($path)
         )->size();
     }
 
     /**
-     * Get the mime-type of a given file.
-     *
-     * @param string $path
-     * @return string|false
+     * @inheritDoc
      */
-    public function mimeType($path)
+    public function mimeType(string $path): string|false
     {
         try {
             return $this->adapter->mimeType(
-                $this->pathNormalizer->normalizePath($path)
+                Path::normalizePath($path)
             )->mimeType();
         } catch (RetrieveMetadataException $exception) {
-            if ($this->isDebug())
+            if ($this->isDebug()) {
                 throw $exception;
+            }
         }
 
         return false;
     }
 
     /**
-     * Get the checksum for a file.
-     *
-     * @param string $path
-     * @param array $config
-     * @return string|bool
+     * @inheritDoc
      */
-    public function checksum($path, $config = [])
+    public function checksum(string $path, array $config = []): string|false
     {
-        $config = $this->сombiningOptions($config);
+        $config = $this->combiningOptions($config);
 
         try {
             $stream = $this->readStream($path);
@@ -491,43 +396,36 @@ class Driver implements DriverInterface
 
             return hash_final($context);
         } catch (InvalidChecksumAlgoException $exception) {
-            if ($this->isDebug())
+            if ($this->isDebug()) {
                 throw $exception;
+            }
         }
 
         return false;
     }
 
     /**
-     * Finder
-     * 
-     * @param string $path
-     * @param bool $deep
-     * @return iterable<FinderAttributesInterface>
+     * @inheritDoc
      */
-    public function finder($path, $deep = false): Finder
+    public function finder(string $path, bool $deep = false): Finder
     {
-        $path = $this->pathNormalizer->normalizePath($path);
+        $path = Path::normalizePath($path);
         $listing = $this->adapter->finder($path, $deep);
 
         return new Finder(
-            $this->finderGenerator(
-                $path,
-                $deep,
-                $listing
-            )
+            $this->finderGenerator($path, $deep, $listing)
         );
     }
 
     /**
-     * Finder option generator
-     * 
+     * Wrap the adapter listing in a generator with error handling.
+     *
      * @param string $path
      * @param bool $deep
-     * @param iterable $listing
+     * @param Generator $listing
      * @return Generator
      */
-    private function finderGenerator($path, $deep, $listing)
+    private function finderGenerator(string $path, bool $deep, Generator $listing): Generator
     {
         try {
             foreach ($listing as $item) {
@@ -539,64 +437,41 @@ class Driver implements DriverInterface
     }
 
     /**
-     * Get an array of all files in a directory.
-     *
-     * @param string|null $directory
-     * @param bool $recursive
-     * @return array
+     * @inheritDoc
      */
-    public function files($directory = null, $recursive = false)
+    public function files(?string $directory = null, bool $recursive = false): array
     {
         return $this->finder($directory ?? '', $recursive)
-            ->filter(function (FinderFileAttributesInterface $attributes) {
-                return $attributes->isFile();
-            })
+            ->filter(fn(FinderFileAttributesInterface $attributes): bool => $attributes->isFile())
             ->sortByPath()
-            ->map(function (FinderFileAttributesInterface $attributes) {
-                return $attributes->path();
-            })
+            ->map(fn(FinderFileAttributesInterface $attributes): string => $attributes->path())
             ->toArray();
     }
 
     /**
-     * Get all of the directories within a given directory.
-     *
-     * @param string|null $directory
-     * @param bool $recursive
-     * @return array
+     * @inheritDoc
      */
-    public function directories($directory = null, $recursive = false)
+    public function directories(?string $directory = null, bool $recursive = false): array
     {
         return $this->finder($directory ?? '', $recursive)
-            ->filter(function (FinderAttributesInterface $attributes) {
-                return $attributes->isDir();
-            })
-            ->map(function (FinderAttributesInterface $attributes) {
-                return $attributes->path();
-            })
+            ->filter(fn(FinderAttributesInterface $attributes): bool => $attributes->isDir())
+            ->map(fn(FinderAttributesInterface $attributes): string => $attributes->path())
             ->toArray();
     }
 
     /**
-     * Get the entire contents of a directory as a map.
-     *
-     * @param string|null $directory
-     * @param bool $recursive
-     * @return array
+     * @inheritDoc
      */
-    public function fileMap($directory = null, $recursive = false)
+    public function fileMap(?string $directory = null, bool $recursive = false): array
     {
-        return $this->finder($directory ?? '')
-            ->map(function (FinderAttributesInterface|FinderFileAttributesInterface $attributes) use ($recursive) {
+        return $this->finder($directory ?? '', $recursive)
+            ->map(function (FinderAttributesInterface|FinderFileAttributesInterface $attributes) use ($recursive): array {
                 $item = [
                     'name' => $this->name($attributes->path()),
                     'type' => $attributes->isDir() ? 'directory' : 'file',
                     'path' => $attributes->path(),
-                    'fullPath' => $this->path(
-                        $attributes->path(),
-
-                    ),
-                    'lastModified' => $attributes->lastModified()
+                    'fullPath' => $this->path($attributes->path()),
+                    'lastModified' => $attributes->lastModified(),
                 ];
 
                 if ($attributes->isFile()) {
@@ -613,65 +488,46 @@ class Driver implements DriverInterface
     }
 
     /**
-     * Get the visibility for the given path.
-     *
-     * @param string $path
-     * @return string|null
+     * @inheritDoc
      */
-    public function getVisibility($path)
+    public function getVisibility(string $path): string
     {
-        try {
-            return $this->adapter->getVisibility(
-                $this->pathNormalizer->normalizePath($path)
-            )->getVisibility();
-        } catch (RetrieveMetadataException $exception) {
-            if ($this->isDebug())
-                throw $exception;
-        }
-
-        return Filesystem::VISIBILITY_PRIVATE;
+        return $this->adapter->getVisibility(
+            Path::normalizePath($path)
+        )->getVisibility();
     }
 
     /**
-     * Set the visibility for the given path.
-     *
-     * @param string $path
-     * @param string $visibility
-     * @return bool
+     * @inheritDoc
      */
-    public function setVisibility($path, $visibility)
+    public function setVisibility(string $path, string $visibility): bool
     {
         try {
             $this->adapter->setVisibility(
-                $this->pathNormalizer->normalizePath($path),
+                Path::normalizePath($path),
                 $visibility
             );
 
             return true;
         } catch (SetVisibilityException $exception) {
-            if ($this->isDebug())
+            if ($this->isDebug()) {
                 throw $exception;
+            }
         }
 
         return false;
     }
 
     /**
-     * Write the contents of a file.
-     *
-     * @param string $path
-     * @param \Psr\Http\Message\StreamInterface|string|resource $contents
-     * @param mixed $config
-     * @return bool
+     * @inheritDoc
      */
-    public function put($path, $contents, $config = [])
+    public function put(string $path, mixed $contents, array|string $config = []): bool
     {
-
         $config = is_string($config)
             ? ['visibility' => $config]
             : (array) $config;
 
-        $config = $this->сombiningOptions($config);
+        $config = $this->combiningOptions($config);
 
         try {
             if ($contents instanceof StreamInterface) {
@@ -684,7 +540,7 @@ class Driver implements DriverInterface
                 $this->adapter->writeStream($path, $contents, $config);
             } else {
                 $this->adapter->put(
-                    $this->pathNormalizer->normalizePath($path),
+                    Path::normalizePath($path),
                     $contents,
                     $config
                 );
@@ -692,31 +548,29 @@ class Driver implements DriverInterface
 
             return true;
         } catch (WriteFileException | SetVisibilityException $exception) {
-            if ($this->isDebug())
+            if ($this->isDebug()) {
                 throw $exception;
+            }
         }
 
         return false;
     }
 
     /**
-     * Write a new file using a stream.
-     *
-     * @param string $path
-     * @param \Psr\Http\Message\StreamInterface|string|resource $contents
-     * @param array $options
-     * @return bool
+     * @inheritDoc
      */
-    public function writeStream($path, $contents, $config = [])
+    public function writeStream(string $path, mixed $contents, array $config = []): bool
     {
         if ($this->isDebug()) {
-            if (is_resource($contents) === false) {
+            if (! is_resource($contents)) {
                 throw new InvalidStreamProvidedException(
                     "Invalid stream provided, expected stream resource, received " . gettype($contents)
                 );
-            } elseif ($type = get_resource_type($contents) !== 'stream') {
+            }
+
+            if (get_resource_type($contents) !== 'stream') {
                 throw new InvalidStreamProvidedException(
-                    "Invalid stream provided, expected stream resource, received resource of type " . $type
+                    "Invalid stream provided, expected stream resource, received resource of type " . get_resource_type($contents)
                 );
             }
         }
@@ -727,30 +581,25 @@ class Driver implements DriverInterface
 
         try {
             $this->adapter->writeStream(
-                $this->pathNormalizer->normalizePath($path),
+                Path::normalizePath($path),
                 $contents,
-                $this->сombiningOptions($config)
+                $this->combiningOptions($config)
             );
 
             return true;
         } catch (WriteFileException | SetVisibilityException $exception) {
-            if ($this->isDebug())
+            if ($this->isDebug()) {
                 throw $exception;
+            }
         }
 
         return false;
     }
 
     /**
-     * Prepend to a file.
-     *
-     * @param string $path
-     * @param string $data
-     * @param string $separator
-     * @param array $config
-     * @return bool
+     * @inheritDoc
      */
-    public function prepend($path, $data, $separator = PHP_EOL, $config = [])
+    public function prepend(string $path, string $data, string $separator = PHP_EOL, array $config = []): bool
     {
         if ($this->fileExists($path)) {
             return $this->put(
@@ -760,23 +609,13 @@ class Driver implements DriverInterface
             );
         }
 
-        return $this->put(
-            $path,
-            $data,
-            $config
-        );
+        return $this->put($path, $data, $config);
     }
 
     /**
-     * Append to a file.
-     * 
-     * @param string $path
-     * @param string $data
-     * @param string $separator
-     * @param array $config
-     * @return bool
+     * @inheritDoc
      */
-    public function append($path, $data, $separator = PHP_EOL, $config = [])
+    public function append(string $path, string $data, string $separator = PHP_EOL, array $config = []): bool
     {
         if ($this->fileExists($path)) {
             return $this->put(
@@ -786,73 +625,55 @@ class Driver implements DriverInterface
             );
         }
 
-        return $this->put(
-            $path,
-            $data,
-            $config
-        );
+        return $this->put($path, $data, $config);
     }
 
     /**
-     * Replace a given string within a given file.
-     *
-     * @param array|string $search
-     * @param array|string $replace
-     * @param string $path
-     * @param array $config
-     * @return bool
+     * @inheritDoc
      */
-    public function replaceInFile($search, $replace, $path, $config = [])
+    public function replaceInFile(array|string $search, array|string $replace, string $path, array $config = []): bool
     {
         return $this->put(
             $path,
-            str_replace(
-                $search,
-                $replace,
-                $this->get($path)
-            ),
+            str_replace($search, $replace, $this->get($path)),
             $config
         );
     }
 
     /**
-     * Create a directory.
-     *
-     * @param string $path
-     * @return bool
+     * @inheritDoc
      */
-    public function createDirectory($path, $config = [])
+    public function createDirectory(string $path, array $config = []): bool
     {
         try {
             $this->adapter->createDirectory(
-                $this->pathNormalizer->normalizePath($path),
-                $this->сombiningOptions($config)
+                Path::normalizePath($path),
+                $this->combiningOptions($config)
             );
 
             return true;
         } catch (CreateDirectoryException | SetVisibilityException $exception) {
-            if ($this->isDebug())
+            if ($this->isDebug()) {
                 throw $exception;
+            }
         }
 
         return false;
     }
 
     /**
-     * Recursively delete a directory.
-     *
-     * @param string $directory
-     * @return bool
+     * @inheritDoc
      */
-    public function deleteDirectory($directory)
+    public function deleteDirectory(string $path): bool
     {
         try {
             $this->adapter->deleteDirectory(
-                $this->pathNormalizer->normalizePath($directory)
+                Path::normalizePath($path)
             );
         } catch (DeleteDirectoryException $e) {
-            if ($this->debug)
+            if ($this->debug) {
                 throw $e;
+            }
 
             return false;
         }
@@ -861,27 +682,22 @@ class Driver implements DriverInterface
     }
 
     /**
-     * Delete the file at a given path.
-     *
-     * @param string|array $path
-     * @return bool
+     * @inheritDoc
      */
-    public function delete($path)
+    public function delete(string|array $path): bool
     {
-        $path = is_array($path)
-            ? $path
-            : func_get_args();
-
+        $paths = is_array($path) ? $path : func_get_args();
         $success = true;
 
-        foreach ($path as $item) {
+        foreach ($paths as $item) {
             try {
                 $this->adapter->delete(
-                    $this->pathNormalizer->normalizePath($item)
+                    Path::normalizePath($item)
                 );
             } catch (DeleteFileException $exception) {
-                if ($this->isDebug())
+                if ($this->isDebug()) {
                     throw $exception;
+                }
 
                 $success = false;
             }
@@ -891,19 +707,14 @@ class Driver implements DriverInterface
     }
 
     /**
-     * Move a file to a new path.
-     *
-     * @param string $from
-     * @param string $to
-     * @param array $config
-     * @return bool
+     * @inheritDoc
      */
-    public function move($from, $to, $config = [])
+    public function move(string $from, string $to, array $config = []): bool
     {
         try {
             $config = $this->combiningMoveAndCopyOptions($config);
-            $from = $this->pathNormalizer->normalizePath($from);
-            $to = $this->pathNormalizer->normalizePath($to);
+            $from = Path::normalizePath($from);
+            $to = Path::normalizePath($to);
 
             if ($from === $to) {
                 $strategy = $config[Filesystem::OPTION_MOVE_IDENTICAL_PATH] ?? static::STRATEGY_TRY;
@@ -911,10 +722,12 @@ class Driver implements DriverInterface
                 if ($strategy === static::STRATEGY_FAIL) {
                     if ($this->isDebug()) {
                         throw MoveFileException::fromAndToAreTheSame($from, $to);
-                    } else {
-                        return false;
                     }
-                } elseif ($strategy === static::STRATEGY_IGNORE) {
+
+                    return false;
+                }
+
+                if ($strategy === static::STRATEGY_IGNORE) {
                     return false;
                 }
             }
@@ -923,27 +736,23 @@ class Driver implements DriverInterface
 
             return true;
         } catch (MoveFileException $e) {
-            if ($this->debug)
+            if ($this->debug) {
                 throw $e;
+            }
         }
 
         return false;
     }
 
     /**
-     * Copy a file to a new path.
-     *
-     * @param string  $from
-     * @param string  $to
-     * @param array $config
-     * @return bool
+     * @inheritDoc
      */
-    public function copy($from, $to, $config = [])
+    public function copy(string $from, string $to, array $config = []): bool
     {
         try {
             $config = $this->combiningMoveAndCopyOptions($config);
-            $from = $this->pathNormalizer->normalizePath($from);
-            $to = $this->pathNormalizer->normalizePath($to);
+            $from = Path::normalizePath($from);
+            $to = Path::normalizePath($to);
 
             if ($from === $to) {
                 $strategy = $config[Filesystem::OPTION_COPY_IDENTICAL_PATH] ?? static::STRATEGY_TRY;
@@ -951,17 +760,19 @@ class Driver implements DriverInterface
                 if ($strategy === static::STRATEGY_FAIL) {
                     if ($this->isDebug()) {
                         throw CopyFileException::fromAndToAreTheSame($from, $to);
-                    } else {
-                        return false;
                     }
-                } elseif ($strategy === static::STRATEGY_IGNORE) {
+
+                    return false;
+                }
+
+                if ($strategy === static::STRATEGY_IGNORE) {
                     return false;
                 }
             }
 
-            $systemType = $this->getConfig('systemType', null);
+            $systemType = $this->getConfig('systemType');
 
-            if ($systemType) {
+            if ($systemType !== null) {
                 $config['systemType'] = $systemType;
             }
 
@@ -969,32 +780,30 @@ class Driver implements DriverInterface
 
             return true;
         } catch (CopyFileException $e) {
-            if ($this->debug)
+            if ($this->debug) {
                 throw $e;
+            }
         }
 
         return false;
     }
 
     /**
-     * Combining move and copy configuration options
-     * 
-     * @param array $config
-     * @return array
+     * Merge move/copy configuration with root options.
+     *
+     * @param array<string, mixed> $config
+     * @return array<string, mixed>
      */
-    private function combiningMoveAndCopyOptions($config)
+    private function combiningMoveAndCopyOptions(array $config): array
     {
         $retainVisibility = $config[Filesystem::OPTION_RETAIN_VISIBILITY]
             ?? ($config[Filesystem::OPTION_RETAIN_VISIBILITY] ?? true);
 
-        $fullConfig = $this->сombiningOptions($config);
+        $fullConfig = $this->combiningOptions($config);
 
         if (
             $retainVisibility &&
-            !array_key_exists(
-                Filesystem::OPTION_VISIBILITY,
-                $config
-            )
+            ! array_key_exists(Filesystem::OPTION_VISIBILITY, $config)
         ) {
             $fullConfig = $this->excludeOptions(Filesystem::OPTION_VISIBILITY);
         }

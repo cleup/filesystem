@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Cleup\Filesystem\Drivers;
 
 use Cleup\Filesystem\Adapters\Sftp\SftpAdapter;
@@ -8,19 +10,21 @@ use Cleup\Filesystem\Driver;
 use Cleup\Filesystem\Filesystem;
 use Cleup\Filesystem\Interfaces\AdapterInterface;
 
+/**
+ * SFTP filesystem driver.
+ * Provides SFTP file storage operations through the Driver abstraction.
+ */
 class SftpDriver extends Driver
 {
     /**
-     * List of default configuration options
-     *
-     * @return array
+     * @inheritDoc
      */
-    protected function configure()
+    protected function configure(): ?array
     {
         return [
-            'host' => null,       // required
-            'username' => null,   // required
-            'password' => null,   // required
+            'host' => null,
+            'username' => null,
+            'password' => null,
             'privateKey' => null,
             'passphrase' => null,
             'useAgent' => false,
@@ -48,11 +52,9 @@ class SftpDriver extends Driver
     }
 
     /**
-     * Create an instance of the ftp driver.
-     *
-     * @return AdapterInterface
+     * @inheritDoc
      */
-    protected function create()
+    protected function create(): AdapterInterface
     {
         $sftpConfig = $this->onlyArrayItems(
             $this->getConfig(),
@@ -68,26 +70,25 @@ class SftpDriver extends Driver
                 'maxTries',
                 'hostFingerprint',
                 'connectivityChecker',
-                'preferredAlgorithms'
+                'preferredAlgorithms',
             ]
         );
 
-        $provider = $this->getConfig(
-            'provider',
-            SftpConnectionProvider::fromArray($sftpConfig)
-        );
+        $provider = $this->getConfig('provider')
+            ?? SftpConnectionProvider::fromArray($sftpConfig);
 
         $root = '';
 
-        if ($this->getConfig('root', false))
-            $root = rtrim($this->getConfig('root'), '/') . '/';
+        if ($this->getConfig('root')) {
+            $root = rtrim((string) $this->getConfig('root'), '/') . '/';
+        }
 
         return new SftpAdapter(
-            $provider,
-            $root,
-            $this->visibilityConverter(),
-            $this->getConfig('mimeTypeDetector', null),
-            $this->getConfig('finderMimeTypeDetect', false),
+            connectionProvider: $provider,
+            root: $root,
+            visibilityConverter: $this->visibilityConverter(),
+            mimeTypeDetector: $this->getConfig('mimeTypeDetector'),
+            finderMimeTypeDetect: $this->getConfig('finderMimeTypeDetect', false),
         );
     }
 }

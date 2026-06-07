@@ -1,26 +1,32 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Cleup\Filesystem\Drivers;
 
-use Cleup\Filesystem\Driver;
 use Cleup\Filesystem\Adapters\Ftp\FtpAdapter;
 use Cleup\Filesystem\Adapters\Ftp\FtpConnectionOptions;
+use Cleup\Filesystem\Driver;
 use Cleup\Filesystem\Filesystem;
 use Cleup\Filesystem\Interfaces\AdapterInterface;
 
+use const FTP_BINARY;
+
+/**
+ * FTP filesystem driver.
+ * Provides FTP/SFTP file storage operations through the Driver abstraction.
+ */
 class FtpDriver extends Driver
 {
     /**
-     * List of default configuration options
-     *
-     * @return array
+     * @inheritDoc
      */
-    protected function configure()
+    protected function configure(): ?array
     {
         return [
-            'host' => '', // required
-            'username' => '', // required
-            'password' => '', // required
+            'host' => '',
+            'username' => '',
+            'password' => '',
             'root' => '',
             'port' => 21,
             'ssl' => false,
@@ -28,7 +34,7 @@ class FtpDriver extends Driver
             'utf8' => false,
             'passive' => true,
             'transferMode' => FTP_BINARY,
-            'systemType' => null, // 'windows' or 'unix'
+            'systemType' => null,
             'useRawListOptions' => null,
             'ignorePassiveAddress' => null,
             'timestampsOnUnixListingsEnabled' => true,
@@ -51,11 +57,9 @@ class FtpDriver extends Driver
     }
 
     /**
-     * Create an instance of the ftp driver.
-     *
-     * @return AdapterInterface
+     * @inheritDoc
      */
-    protected function create()
+    protected function create(): AdapterInterface
     {
         $ftpConfig = $this->onlyArrayItems(
             $this->getConfig(),
@@ -79,12 +83,12 @@ class FtpDriver extends Driver
         );
 
         return new FtpAdapter(
-            FtpConnectionOptions::fromArray($ftpConfig),
-            $this->getConfig('provider', null),
-            $this->getConfig('checker', null),
-            $this->visibilityConverter(),
-            $this->getConfig('mimeTypeDetector', null),
-            $this->getConfig('finderMimeTypeDetect', false),
+            connectionOptions: FtpConnectionOptions::fromArray($ftpConfig),
+            connectionProvider: $this->getConfig('provider'),
+            connectivityChecker: $this->getConfig('checker'),
+            visibilityConverter: $this->visibilityConverter(),
+            mimeTypeDetector: $this->getConfig('mimeTypeDetector'),
+            finderMimeTypeDetect: $this->getConfig('finderMimeTypeDetect', false),
         );
     }
 }

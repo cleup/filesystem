@@ -8,33 +8,54 @@ use Cleup\Filesystem\Interfaces\SftpConnectivityCheckerInterface;
 use phpseclib3\Net\SFTP;
 use Throwable;
 
+/**
+ * Checks SFTP connection liveness.
+ * Used by the file upload library to verify connections are still alive before file operations.
+ * Supports simple connectivity check or optional ping-based verification.
+ */
 class SftpConnectivityChecker implements SftpConnectivityCheckerInterface
 {
+    /**
+     * @param bool $usePing Whether to use ping for connectivity check (more thorough but slower).
+     */
     public function __construct(
-        private bool $usePing = false,
-    ) {
-    }
+        private readonly bool $usePing = false,
+    ) {}
 
-    public static function create(): SftpConnectivityChecker
+    /**
+     * Create a new instance with default settings (no ping).
+     *
+     * @return self
+     */
+    public static function create(): self
     {
-        return new SftpConnectivityChecker();
+        return new self();
     }
 
-    public function withUsingPing(bool $usePing): SftpConnectivityChecker
+    /**
+     * Create a copy with the specified ping setting.
+     *
+     * @param bool $usePing Whether to use ping for connectivity check.
+     * @return self
+     */
+    public function withUsingPing(bool $usePing): self
     {
-        $clone = clone $this;
-        $clone->usePing = $usePing;
-
-        return $clone;
+        return new self(usePing: $usePing);
     }
 
+    /**
+     * Check if the SFTP connection is still alive.
+     *
+     * @param SFTP $connection The SFTP connection to check.
+     * @return bool True if connected (and ping succeeds, if enabled).
+     */
     public function isConnected(SFTP $connection): bool
     {
-        if ( ! $connection->isConnected()) {
+        if (! $connection->isConnected()) {
             return false;
         }
 
-        if ( ! $this->usePing) {
+        if (! $this->usePing) {
             return true;
         }
 

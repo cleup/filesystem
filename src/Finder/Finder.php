@@ -10,15 +10,27 @@ use Generator;
 use IteratorAggregate;
 use Traversable;
 
+/**
+ * Iterable finder for directory listings.
+ * Wraps a generator/iterable with filter, map, and sort operations.
+ * Used by the file upload library for directory listing manipulation.
+ */
 class Finder implements IteratorAggregate
 {
-    public function __construct(private iterable $listing) {}
+    /**
+     * @param iterable $listing The underlying listing iterable.
+     */
+    public function __construct(
+        private iterable $listing,
+    ) {}
 
     /**
-     * @param callable $filter
+     * Filter the listing using a callback.
+     *
+     * @param callable $filter Filter function.
      * @return static
      */
-    public function filter($filter)
+    public function filter(callable $filter): static
     {
         $generator = (static function (iterable $listing) use ($filter): Generator {
             foreach ($listing as $item) {
@@ -32,10 +44,12 @@ class Finder implements IteratorAggregate
     }
 
     /**
-     * @param callable $mapper
+     * Map the listing using a callback.
+     *
+     * @param callable $mapper Mapping function.
      * @return static
      */
-    public function map(callable $mapper)
+    public function map(callable $mapper): static
     {
         $generator = (static function (iterable $listing) use ($mapper): Generator {
             foreach ($listing as $item) {
@@ -47,20 +61,26 @@ class Finder implements IteratorAggregate
     }
 
     /**
+     * Sort the listing by path.
+     *
      * @return static
      */
-    public function sortByPath()
+    public function sortByPath(): static
     {
         $listing = $this->toArray();
 
-        usort($listing, function (FinderAttributesInterface $a, FinderAttributesInterface $b) {
-            return $a->path() <=> $b->path();
-        });
+        usort(
+            $listing,
+            static fn(FinderAttributesInterface $a, FinderAttributesInterface $b): int =>
+            $a->path() <=> $b->path()
+        );
 
         return new static($listing);
     }
 
     /**
+     * Get the iterator for the listing.
+     *
      * @return Traversable
      */
     public function getIterator(): Traversable
@@ -71,9 +91,11 @@ class Finder implements IteratorAggregate
     }
 
     /**
+     * Convert the listing to an array.
+     *
      * @return array
      */
-    public function toArray()
+    public function toArray(): array
     {
         return $this->listing instanceof Traversable
             ? iterator_to_array($this->listing, false)

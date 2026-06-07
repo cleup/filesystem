@@ -7,21 +7,30 @@ namespace Cleup\Filesystem\Support;
 use Cleup\Filesystem\Filesystem;
 use Cleup\Filesystem\Interfaces\VisibilityConverterInterface;
 
+/**
+ * Converts between string and numeric visibility/permissions.
+ */
 class VisibilityConverter implements VisibilityConverterInterface
 {
+    /**
+     * @param int $filePublic Public file permissions (default: 0644).
+     * @param int $filePrivate Private file permissions (default: 0600).
+     * @param int $directoryPublic Public directory permissions (default: 0755).
+     * @param int $directoryPrivate Private directory permissions (default: 0700).
+     * @param string $defaultForDirectories Default visibility for directories.
+     */
     public function __construct(
-        private int $filePublic = 0644,
-        private int $filePrivate = 0600,
-        private int $directoryPublic = 0755,
-        private int $directoryPrivate = 0700,
-        private string $defaultForDirectories = Filesystem::VISIBILITY_PRIVATE
+        private readonly int $filePublic = 0644,
+        private readonly int $filePrivate = 0600,
+        private readonly int $directoryPublic = 0755,
+        private readonly int $directoryPrivate = 0700,
+        private readonly string $defaultForDirectories = Filesystem::VISIBILITY_PRIVATE,
     ) {}
 
     /**
-     * @param string $visibility
-     * @return int
+     * @inheritDoc
      */
-    public function forFile($visibility)
+    public function forFile(string $visibility): int
     {
         VisibilityGuard::guardAgainstInvalidInput($visibility);
 
@@ -31,10 +40,9 @@ class VisibilityConverter implements VisibilityConverterInterface
     }
 
     /**
-     * @param string $visibility
-     * @return int
+     * @inheritDoc
      */
-    public function forDirectory($visibility)
+    public function forDirectory(string $visibility): int
     {
         VisibilityGuard::guardAgainstInvalidInput($visibility);
 
@@ -44,14 +52,15 @@ class VisibilityConverter implements VisibilityConverterInterface
     }
 
     /**
-     * @param int $visibility
-     * @return string
+     * @inheritDoc
      */
-    public function inverseForFile($visibility)
+    public function inverseForFile(int $visibility): string
     {
         if ($visibility === $this->filePublic) {
             return Filesystem::VISIBILITY_PUBLIC;
-        } elseif ($visibility === $this->filePrivate) {
+        }
+
+        if ($visibility === $this->filePrivate) {
             return Filesystem::VISIBILITY_PRIVATE;
         }
 
@@ -59,14 +68,15 @@ class VisibilityConverter implements VisibilityConverterInterface
     }
 
     /**
-     * @param int $visibility
-     * @return string
+     * @inheritDoc
      */
-    public function inverseForDirectory($visibility)
+    public function inverseForDirectory(int $visibility): string
     {
         if ($visibility === $this->directoryPublic) {
             return Filesystem::VISIBILITY_PUBLIC;
-        } elseif ($visibility === $this->directoryPrivate) {
+        }
+
+        if ($visibility === $this->directoryPrivate) {
             return Filesystem::VISIBILITY_PRIVATE;
         }
 
@@ -74,9 +84,9 @@ class VisibilityConverter implements VisibilityConverterInterface
     }
 
     /**
-     * @return int
+     * @inheritDoc
      */
-    public function defaultForDirectories()
+    public function defaultForDirectories(): int
     {
         return $this->defaultForDirectories === Filesystem::VISIBILITY_PUBLIC
             ? $this->directoryPublic
@@ -84,18 +94,20 @@ class VisibilityConverter implements VisibilityConverterInterface
     }
 
     /**
-     * @param array $permissionMap
+     * Create a VisibilityConverter from a configuration array.
+     *
+     * @param array<string, array<string, int>> $permissionMap
      * @param string $defaultForDirectories
      * @return static
      */
-    public static function fromArray($permissionMap, $defaultForDirectories = Filesystem::VISIBILITY_PRIVATE)
+    public static function fromArray(array $permissionMap, string $defaultForDirectories = Filesystem::VISIBILITY_PRIVATE): static
     {
-        return new VisibilityConverter(
-            $permissionMap['file']['public'] ?? 0644,
-            $permissionMap['file']['private'] ?? 0600,
-            $permissionMap['dir']['public'] ?? 0755,
-            $permissionMap['dir']['private'] ?? 0700,
-            $defaultForDirectories
+        return new static(
+            filePublic: $permissionMap['file']['public'] ?? 0644,
+            filePrivate: $permissionMap['file']['private'] ?? 0600,
+            directoryPublic: $permissionMap['dir']['public'] ?? 0755,
+            directoryPrivate: $permissionMap['dir']['private'] ?? 0700,
+            defaultForDirectories: $defaultForDirectories,
         );
     }
 }

@@ -4,19 +4,24 @@ declare(strict_types=1);
 
 namespace Cleup\Filesystem\Interfaces;
 
+/**
+ * Interface for file attributes objects.
+ * Extends FinderAttributesInterface with file-specific methods.
+ * Used by the file upload library to represent file entries in listings.
+ */
 interface FinderFileAttributesInterface extends FinderAttributesInterface
 {
     /**
-     * File size
-     * 
+     * Get the file size in bytes.
+     *
      * @return int
      */
-    public function size();
+    public function size(): int;
 
     /**
-     * File mime type
-     * 
-     * @return string
+     * Get the MIME type of the file.
+     *
+     * @return string|null
      */
-    public function mimeType();
+    public function mimeType(): ?string;
 }
