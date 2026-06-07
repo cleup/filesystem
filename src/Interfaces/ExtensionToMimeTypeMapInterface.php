@@ -4,11 +4,10 @@ declare(strict_types=1);
 
 namespace Cleup\Filesystem\Interfaces;
 
+/**
+ * Maps file extensions to MIME types.
+ */
 interface ExtensionToMimeTypeMapInterface
 {
-    /**
-     * @param string $extension
-     * @return ?string
-     */
-    public function lookupMimeType($extension);
+    public function lookupMimeType(string $extension): ?string;
 }

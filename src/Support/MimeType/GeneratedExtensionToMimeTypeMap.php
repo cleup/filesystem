@@ -7,6 +7,9 @@ namespace Cleup\Filesystem\Support\MimeType;
 use Cleup\Filesystem\Interfaces\ExtensionLookupInterface;
 use Cleup\Filesystem\Interfaces\ExtensionToMimeTypeMapInterface;
 
+/**
+ * Auto-generated extension-to-MIME-type map with reverse lookup.
+ */
 class GeneratedExtensionToMimeTypeMap implements ExtensionToMimeTypeMapInterface, ExtensionLookupInterface
 {
     /**
@@ -1258,7 +1261,7 @@ class GeneratedExtensionToMimeTypeMap implements ExtensionToMimeTypeMapInterface
     ];
 
     /**
-     * @var array<string, string>
+     * @var array<string, array<int, string>>
      *
      * @internal
      */
@@ -2294,28 +2297,25 @@ class GeneratedExtensionToMimeTypeMap implements ExtensionToMimeTypeMapInterface
     ];
 
     /**
-     * @param string $extension
-     * @return ?string
+     * @inheritDoc
      */
-    public function lookupMimeType($extension)
+    public function lookupMimeType(string $extension): ?string
     {
         return self::MIME_TYPES_FOR_EXTENSIONS[$extension] ?? null;
     }
 
     /**
-     * @param string $mimetype
-     * @return ?string
+     * @inheritDoc
      */
-    public function lookupExtension($mimetype)
+    public function lookupExtension(string $mimetype): ?string
     {
         return self::EXTENSIONS_FOR_MIME_TIMES[$mimetype][0] ?? null;
     }
 
     /**
-     * @param string $mimetype
-     * @return array
+     * @inheritDoc
      */
-    public function lookupAllExtensions($mimetype)
+    public function lookupAllExtensions(string $mimetype): array
     {
         return self::EXTENSIONS_FOR_MIME_TIMES[$mimetype] ?? [];
     }

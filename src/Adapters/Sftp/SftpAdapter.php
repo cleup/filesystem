@@ -4,14 +4,6 @@ declare(strict_types=1);
 
 namespace Cleup\Filesystem\Adapters\Sftp;
 
-use Cleup\Filesystem\Finder\DirectoryAttributes;
-use Cleup\Filesystem\Finder\FileAttributes;
-use Cleup\Filesystem\Interfaces\AdapterInterface;
-use Cleup\Filesystem\Interfaces\FilesystemExceptionInterface;
-use Cleup\Filesystem\Support\PathPrefixer;
-use Cleup\Filesystem\Interfaces\FinderAttributesInterface;
-use Cleup\Filesystem\Exceptions\CheckDirectoryExistenceException;
-use Cleup\Filesystem\Exceptions\CheckFileExistenceException;
 use Cleup\Filesystem\Exceptions\CopyFileException;
 use Cleup\Filesystem\Exceptions\CreateDirectoryException;
 use Cleup\Filesystem\Exceptions\MoveFileException;
@@ -20,16 +12,28 @@ use Cleup\Filesystem\Exceptions\RetrieveMetadataException;
 use Cleup\Filesystem\Exceptions\SetVisibilityException;
 use Cleup\Filesystem\Exceptions\WriteFileException;
 use Cleup\Filesystem\Filesystem;
-use Cleup\Filesystem\Support\VisibilityConverter;
-use Cleup\Filesystem\Interfaces\VisibilityConverterInterface;
-use Cleup\Filesystem\Support\MimeType\FinfoMimeTypeDetector;
+use Cleup\Filesystem\Finder\DirectoryAttributes;
+use Cleup\Filesystem\Finder\FileAttributes;
+use Cleup\Filesystem\Interfaces\AdapterInterface;
+use Cleup\Filesystem\Interfaces\FinderAttributesInterface;
 use Cleup\Filesystem\Interfaces\MimeTypeDetectorInterface;
 use Cleup\Filesystem\Interfaces\SftpConnectionProviderInterface;
+use Cleup\Filesystem\Interfaces\VisibilityConverterInterface;
+use Cleup\Filesystem\Support\MimeType\FinfoMimeTypeDetector;
+use Cleup\Filesystem\Support\PathPrefixer;
+use Cleup\Filesystem\Support\VisibilityConverter;
+use Generator;
 use phpseclib3\Net\SFTP;
 use Throwable;
 
 use function rtrim;
 
+/**
+ * SFTP adapter for file upload/download operations.
+ * Provides SFTP filesystem interaction through the unified AdapterInterface.
+ *
+ * @inheritDoc
+ */
 class SftpAdapter implements AdapterInterface
 {
     private VisibilityConverterInterface $visibilityConverter;
@@ -37,13 +41,21 @@ class SftpAdapter implements AdapterInterface
     private MimeTypeDetectorInterface $mimeTypeDetector;
     private bool $finderMimeTypeDetect = false;
 
+    /**
+     * @param SftpConnectionProviderInterface $connectionProvider SFTP connection provider.
+     * @param string $root Root directory path.
+     * @param VisibilityConverterInterface|null $visibilityConverter Converts between string and numeric permissions.
+     * @param MimeTypeDetectorInterface|null $mimeTypeDetector Detects MIME types for files.
+     * @param bool $finderMimeTypeDetect Whether to detect MIME types during directory listing.
+     * @param bool $detectMimeTypeUsingPath Whether to detect MIME types by path instead of content.
+     */
     public function __construct(
-        private SftpConnectionProviderInterface $connectionProvider,
+        private readonly SftpConnectionProviderInterface $connectionProvider,
         string $root,
         ?VisibilityConverterInterface $visibilityConverter = null,
         ?MimeTypeDetectorInterface $mimeTypeDetector = null,
-        $finderMimeTypeDetect = false,
-        private bool $detectMimeTypeUsingPath = false,
+        bool $finderMimeTypeDetect = false,
+        private readonly bool $detectMimeTypeUsingPath = false,
     ) {
         $this->prefixer = new PathPrefixer($root);
         $this->visibilityConverter = $visibilityConverter ?? new VisibilityConverter();
@@ -51,41 +63,43 @@ class SftpAdapter implements AdapterInterface
         $this->finderMimeTypeDetect = $finderMimeTypeDetect;
     }
 
-    public function fileExists($path): bool
+    /**
+     * @inheritDoc
+     */
+    public function fileExists(string $path): bool
     {
         $location = $this->prefixer->prefixPath($path);
 
-        try {
-            return $this->connectionProvider->provideConnection()->is_file($location);
-        } catch (Throwable $exception) {
-            throw CheckFileExistenceException::forLocation($path, $exception);
-        }
+        return $this->connectionProvider->provideConnection()->is_file($location);
     }
 
+    /**
+     * Disconnect the SFTP connection.
+     */
     public function disconnect(): void
     {
         $this->connectionProvider->disconnect();
     }
 
-    public function directoryExists($path): bool
+    /**
+     * @inheritDoc
+     */
+    public function directoryExists(string $path): bool
     {
         $location = $this->prefixer->prefixDirectoryPath($path);
 
-        try {
-            return $this->connectionProvider->provideConnection()->is_dir($location);
-        } catch (Throwable $exception) {
-            throw CheckDirectoryExistenceException::forLocation($path, $exception);
-        }
+        return $this->connectionProvider->provideConnection()->is_dir($location);
     }
 
     /**
-     * @param string          $path
-     * @param string|resource $contents
-     * @param array           $config
+     * Upload contents to a file.
      *
-     * @throws FilesystemExceptionInterface
+     * @param string $path
+     * @param string|resource $contents
+     * @param array<string, mixed> $config
+     * @throws WriteFileException
      */
-    private function upload(string $path, $contents, $config = []): void
+    private function upload(string $path, mixed $contents, array $config = []): void
     {
         $this->ensureParentDirectoryExists($path, $config);
         $connection = $this->connectionProvider->provideConnection();
@@ -95,12 +109,21 @@ class SftpAdapter implements AdapterInterface
             throw WriteFileException::atLocation($path, 'not able to write the file');
         }
 
-        if ($visibility = ($config[Filesystem::OPTION_VISIBILITY] ?? null)) {
+        $visibility = $config[Filesystem::OPTION_VISIBILITY] ?? null;
+
+        if ($visibility !== null) {
             $this->setVisibility($path, $visibility);
         }
     }
 
-    private function ensureParentDirectoryExists(string $path, $config = []): void
+    /**
+     * Ensure the parent directory of a file path exists.
+     *
+     * @param string $path
+     * @param array<string, mixed> $config
+     * @throws CreateDirectoryException
+     */
+    private function ensureParentDirectoryExists(string $path, array $config = []): void
     {
         $parentDirectory = dirname($path);
 
@@ -114,6 +137,13 @@ class SftpAdapter implements AdapterInterface
         );
     }
 
+    /**
+     * Create a directory if it doesn't exist.
+     *
+     * @param string $directory
+     * @param string|null $visibility
+     * @throws CreateDirectoryException
+     */
     private function makeDirectory(string $directory, ?string $visibility): void
     {
         $location = $this->prefixer->prefixPath($directory);
@@ -123,16 +153,19 @@ class SftpAdapter implements AdapterInterface
             return;
         }
 
-        $mode = $visibility ? $this->visibilityConverter->forDirectory(
-            $visibility
-        ) : $this->visibilityConverter->defaultForDirectories();
+        $mode = $visibility !== null
+            ? $this->visibilityConverter->forDirectory($visibility)
+            : $this->visibilityConverter->defaultForDirectories();
 
         if (! $connection->mkdir($location, $mode, true) && ! $connection->is_dir($location)) {
             throw CreateDirectoryException::atLocation($directory);
         }
     }
 
-    public function put($path, $contents, $config = []): void
+    /**
+     * @inheritDoc
+     */
+    public function put(string $path, mixed $contents, array $config = []): void
     {
         try {
             $this->upload($path, $contents, $config);
@@ -143,7 +176,10 @@ class SftpAdapter implements AdapterInterface
         }
     }
 
-    public function writeStream($path, $contents, $config = []): void
+    /**
+     * @inheritDoc
+     */
+    public function writeStream(string $path, mixed $contents, array $config = []): void
     {
         try {
             $this->upload($path, $contents, $config);
@@ -154,7 +190,10 @@ class SftpAdapter implements AdapterInterface
         }
     }
 
-    public function get($path): string
+    /**
+     * @inheritDoc
+     */
+    public function get(string $path): string
     {
         $location = $this->prefixer->prefixPath($path);
         $connection = $this->connectionProvider->provideConnection();
@@ -167,7 +206,10 @@ class SftpAdapter implements AdapterInterface
         return $contents;
     }
 
-    public function readStream($path)
+    /**
+     * @inheritDoc
+     */
+    public function readStream(string $path): mixed
     {
         $location = $this->prefixer->prefixPath($path);
         $connection = $this->connectionProvider->provideConnection();
@@ -184,14 +226,20 @@ class SftpAdapter implements AdapterInterface
         return $readStream;
     }
 
-    public function delete($path): void
+    /**
+     * @inheritDoc
+     */
+    public function delete(string $path): void
     {
         $location = $this->prefixer->prefixPath($path);
         $connection = $this->connectionProvider->provideConnection();
         $connection->delete($location);
     }
 
-    public function deleteDirectory($path): void
+    /**
+     * @inheritDoc
+     */
+    public function deleteDirectory(string $path): void
     {
         $location = rtrim($this->prefixer->prefixPath($path), '/') . '/';
         $connection = $this->connectionProvider->provideConnection();
@@ -199,16 +247,23 @@ class SftpAdapter implements AdapterInterface
         $connection->rmdir($location);
     }
 
-    public function createDirectory($path, $config = []): void
+    /**
+     * @inheritDoc
+     */
+    public function createDirectory(string $path, array $config = []): void
     {
         $this->makeDirectory(
             $path,
             $config[Filesystem::OPTION_DIRECTORY_VISIBILITY]
                 ?? $config[Filesystem::OPTION_VISIBILITY]
+                ?? null
         );
     }
 
-    public function setVisibility($path, $visibility): void
+    /**
+     * @inheritDoc
+     */
+    public function setVisibility(string $path, string $visibility): void
     {
         $location = $this->prefixer->prefixPath($path);
         $connection = $this->connectionProvider->provideConnection();
@@ -219,6 +274,14 @@ class SftpAdapter implements AdapterInterface
         }
     }
 
+    /**
+     * Fetch file metadata using SFTP stat.
+     *
+     * @param string $path
+     * @param string $type Metadata type being requested.
+     * @return FileAttributes
+     * @throws RetrieveMetadataException
+     */
     private function fetchFileMetadata(string $path, string $type): FileAttributes
     {
         $location = $this->prefixer->prefixPath($path);
@@ -238,7 +301,10 @@ class SftpAdapter implements AdapterInterface
         return $attributes;
     }
 
-    public function mimeType($path): FileAttributes
+    /**
+     * @inheritDoc
+     */
+    public function mimeType(string $path): FileAttributes
     {
         try {
             $mimetype = $this->detectMimeTypeUsingPath
@@ -255,28 +321,40 @@ class SftpAdapter implements AdapterInterface
         return new FileAttributes($path, null, null, null, $mimetype);
     }
 
-    public function lastModified($path): FileAttributes
+    /**
+     * @inheritDoc
+     */
+    public function lastModified(string $path): FileAttributes
     {
         return $this->fetchFileMetadata($path, FileAttributes::ATTRIBUTE_LAST_MODIFIED);
     }
 
-    public function size($path): FileAttributes
+    /**
+     * @inheritDoc
+     */
+    public function size(string $path): FileAttributes
     {
         return $this->fetchFileMetadata($path, FileAttributes::ATTRIBUTE_FILE_SIZE);
     }
 
-    public function getVisibility($path): FileAttributes
+    /**
+     * @inheritDoc
+     */
+    public function getVisibility(string $path): FileAttributes
     {
         return $this->fetchFileMetadata($path, FileAttributes::ATTRIBUTE_VISIBILITY);
     }
 
-    public function finder($path, $deep): iterable
+    /**
+     * @inheritDoc
+     */
+    public function finder(string $path, bool $deep): Generator
     {
         $connection = $this->connectionProvider->provideConnection();
         $location = $this->prefixer->prefixPath(rtrim($path, '/')) . '/';
         $listing = $connection->rawlist($location, false);
 
-        if (false === $listing) {
+        if ($listing === false) {
             return;
         }
 
@@ -285,27 +363,32 @@ class SftpAdapter implements AdapterInterface
                 continue;
             }
 
-            // Ensure numeric keys are strings.
             $filename = (string) $filename;
             $path = $this->prefixer->stripPrefix($location . ltrim($filename, '/'));
             $attributes = $this->convertListingToAttributes($path, $attributes);
             yield $attributes;
 
             if ($deep && $attributes->isDir()) {
-                foreach ($this->finder($attributes->path(), true) as $child) {
-                    yield $child;
-                }
+                yield from $this->finder($attributes->path(), true);
             }
         }
     }
 
+    /**
+     * Convert raw SFTP listing attributes to a FinderAttributesInterface object.
+     *
+     * @param string $path
+     * @param array<string, mixed> $attributes
+     * @return FinderAttributesInterface
+     */
     private function convertListingToAttributes(string $path, array $attributes): FinderAttributesInterface
     {
         $permissions = $attributes['mode'] & 0777;
         $lastModified = $attributes['mtime'] ?? null;
 
-        if (!defined('NET_SFTP_TYPE_DIRECTORY'))
+        if (! defined('NET_SFTP_TYPE_DIRECTORY')) {
             define('NET_SFTP_TYPE_DIRECTORY', 2);
+        }
 
         if (($attributes['type'] ?? null) === NET_SFTP_TYPE_DIRECTORY) {
             return new DirectoryAttributes(
@@ -326,7 +409,10 @@ class SftpAdapter implements AdapterInterface
         );
     }
 
-    public function move($from, $to, $config = []): void
+    /**
+     * @inheritDoc
+     */
+    public function move(string $from, string $to, array $config = []): void
     {
         $sourceLocation = $this->prefixer->prefixPath($from);
         $destinationLocation = $this->prefixer->prefixPath($to);
@@ -346,7 +432,6 @@ class SftpAdapter implements AdapterInterface
             return;
         }
 
-        // Overwrite existing file / dir
         if ($connection->is_file($destinationLocation)) {
             $this->delete($to);
             if ($connection->rename($sourceLocation, $destinationLocation)) {
@@ -357,7 +442,10 @@ class SftpAdapter implements AdapterInterface
         throw MoveFileException::fromLocationTo($from, $to);
     }
 
-    public function copy($from, $to, $config = []): void
+    /**
+     * @inheritDoc
+     */
+    public function copy(string $from, string $to, array $config = []): void
     {
         try {
             $readStream = $this->readStream($from);
@@ -366,7 +454,7 @@ class SftpAdapter implements AdapterInterface
             if (
                 $visibility === null &&
                 ($config[Filesystem::OPTION_RETAIN_VISIBILITY] ?? true) &&
-                ($config['systemType'] ?? null) != 'windows'
+                ($config['systemType'] ?? null) !== 'windows'
             ) {
                 $config[Filesystem::OPTION_VISIBILITY] = $this->getVisibility($from)->getVisibility();
             }

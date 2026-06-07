@@ -7,36 +7,47 @@ namespace Cleup\Filesystem\Exceptions;
 use RuntimeException;
 use Throwable;
 
+/**
+ * Exception thrown when a file/directory existence check fails.
+ * Used by the file upload library for local, FTP, and SFTP adapters.
+ */
 class CheckExistenceException extends RuntimeException
 {
     /**
-     * @param string $message 
-     * @param int $code
-     * @param ?Throwable $previous
+     * @param string $message Error message.
+     * @param int $code Error code.
+     * @param Throwable|null $previous Previous exception.
      */
-    final public function __construct($message = "", $code = 0, $previous = null)
-    {
+    final public function __construct(
+        string $message = "",
+        int $code = 0,
+        ?Throwable $previous = null,
+    ) {
         parent::__construct($message, $code, $previous);
     }
 
     /**
-     * @param string $path 
-     * @param ?Throwable $previous
+     * Create an exception for a specific path.
+     *
+     * @param string $path The path that failed the check.
+     * @param Throwable|null $exception Previous exception.
      * @return static
      */
-    public static function forLocation(string $path, $exception = null)
+    public static function forLocation(string $path, ?Throwable $exception = null): static
     {
         return new static(
             "Unable to check existence for: {$path}",
             0,
-            $exception
+            $exception,
         );
     }
 
     /**
+     * Get the operation type for this exception.
+     *
      * @return string
      */
-    public function operation()
+    public function operation(): string
     {
         return "EXISTENCE_CHECK";
     }

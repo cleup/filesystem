@@ -6,62 +6,80 @@ namespace Cleup\Filesystem\Finder;
 
 use Cleup\Filesystem\Interfaces\FinderFileAttributesInterface;
 
+/**
+ * File attributes value object.
+ * Represents a file entry in file listings for the file upload library.
+ */
 class FileAttributes extends FinderAttributes implements FinderFileAttributesInterface
 {
-
-    /**
-     * @var string
-     */
     private string $type = FinderFileAttributesInterface::TYPE_FILE;
 
+    /**
+     * @param string $path File path.
+     * @param int|null $fileSize File size in bytes.
+     * @param string|null $visibility File visibility/permissions.
+     * @param int|null $lastModified Last modified timestamp.
+     * @param string|null $mimeType MIME type of the file.
+     * @param array<string, mixed> $extraMetadata Additional metadata.
+     */
     public function __construct(
         private string $path,
         private ?int $fileSize = null,
         private ?string $visibility = null,
         private ?int $lastModified = null,
         private ?string $mimeType = null,
-        private array $extraMetadata = []
+        private array $extraMetadata = [],
     ) {
         $this->path = ltrim($this->path, '/');
     }
 
     /**
+     * Get the file path.
+     *
      * @return string
      */
-    public function path()
+    public function path(): string
     {
         return $this->path;
     }
 
     /**
+     * Get the type (always "file" for files).
+     *
      * @return string
      */
-    public function type()
+    public function type(): string
     {
         return $this->type;
     }
 
     /**
-     * @return string
+     * Get the file visibility.
+     *
+     * @return string|null
      */
-    public function getVisibility()
+    public function getVisibility(): ?string
     {
         return $this->visibility;
     }
 
     /**
-     * @return ?int
+     * Get the last modified timestamp.
+     *
+     * @return int|null
      */
-    public function lastModified()
+    public function lastModified(): ?int
     {
         return $this->lastModified;
     }
 
     /**
-     * @param array $attributes
+     * Create an instance from an array of attributes.
+     *
+     * @param array<string, mixed> $attributes
      * @return static
      */
-    public static function fromArray($attributes)
+    public static function fromArray(array $attributes): static
     {
         return new static(
             $attributes[FinderFileAttributesInterface::ATTRIBUTE_PATH],
@@ -69,31 +87,37 @@ class FileAttributes extends FinderAttributes implements FinderFileAttributesInt
             $attributes[FinderFileAttributesInterface::ATTRIBUTE_VISIBILITY] ?? null,
             $attributes[FinderFileAttributesInterface::ATTRIBUTE_LAST_MODIFIED] ?? null,
             $attributes[FinderFileAttributesInterface::ATTRIBUTE_MIME_TYPE] ?? null,
-            $attributes[FinderFileAttributesInterface::ATTRIBUTE_EXTRA_METADATA] ?? []
+            $attributes[FinderFileAttributesInterface::ATTRIBUTE_EXTRA_METADATA] ?? [],
         );
     }
 
     /**
+     * Check if this is a file (always true for files).
+     *
      * @return bool
      */
-    public function isFile()
+    public function isFile(): bool
     {
         return true;
     }
 
     /**
+     * Check if this is a directory (always false for files).
+     *
      * @return bool
      */
-    public function isDir()
+    public function isDir(): bool
     {
         return false;
     }
 
     /**
-     * @param string $path
+     * Create a copy with a different path.
+     *
+     * @param string $path New path.
      * @return static
      */
-    public function withPath($path)
+    public function withPath(string $path): static
     {
         $clone = clone $this;
         $clone->path = $path;
@@ -102,25 +126,31 @@ class FileAttributes extends FinderAttributes implements FinderFileAttributesInt
     }
 
     /**
-     * @return array
+     * Get extra metadata.
+     *
+     * @return array<string, mixed>
      */
-    public function extraMetadata()
+    public function extraMetadata(): array
     {
         return $this->extraMetadata;
     }
 
     /**
+     * Get the file size in bytes.
+     *
      * @return int
      */
-    public function size()
+    public function size(): int
     {
         return $this->fileSize ?? 0;
     }
 
     /**
-     * @return ?string
+     * Get the MIME type.
+     *
+     * @return string|null
      */
-    public function mimeType()
+    public function mimeType(): ?string
     {
         return $this->mimeType;
     }

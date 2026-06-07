@@ -8,19 +8,26 @@ use Cleup\Filesystem\Interfaces\FilesystemExceptionInterface;
 use RuntimeException;
 use Throwable;
 
+/**
+ * Exception thrown when loading an SFTP private key fails.
+ * Used by the file upload library for SFTP adapter authentication.
+ */
 class SftpLoadPrivateKeyException extends RuntimeException implements FilesystemExceptionInterface
 {
     /**
-     * @param ?string $message
-     * @param ?Throwable $previous
-     * @return void
+     * @param string|null $message Error message.
+     * @param int $code Error code.
+     * @param Throwable|null $previous Previous exception.
      */
-    public function __construct($message = 'Unable to load private key.', $previous = null)
-    {
+    public function __construct(
+        ?string $message = null,
+        int $code = 0,
+        ?Throwable $previous = null,
+    ) {
         parent::__construct(
             $message ?? 'Unable to load private key.',
-            0,
-            $previous
+            $code,
+            $previous,
         );
     }
 }

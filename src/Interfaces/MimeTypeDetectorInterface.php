@@ -4,30 +4,33 @@ declare(strict_types=1);
 
 namespace Cleup\Filesystem\Interfaces;
 
+/**
+ * Detects MIME types for files.
+ */
 interface MimeTypeDetectorInterface
 {
     /**
      * @param string $path
      * @param string|resource $contents
-     * @return ?string
+     * @return string|null
      */
-    public function detectMimeType($path, $contents);
+    public function detectMimeType(string $path, mixed $contents): ?string;
 
     /**
      * @param string $contents
-     * @return ?string
+     * @return string|null
      */
-    public function detectMimeTypeFromBuffer($contents);
+    public function detectMimeTypeFromBuffer(string $contents): ?string;
 
     /**
      * @param string $path
-     * @return ?string
+     * @return string|null
      */
-    public function detectMimeTypeFromPath($path);
+    public function detectMimeTypeFromPath(string $path): ?string;
 
     /**
      * @param string $path
-     * @return ?string
+     * @return string|null
      */
-    public function detectMimeTypeFromFile($path);
+    public function detectMimeTypeFromFile(string $path): ?string;
 }

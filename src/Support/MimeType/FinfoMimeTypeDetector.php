@@ -8,14 +8,15 @@ use Cleup\Filesystem\Interfaces\ExtensionLookupInterface;
 use Cleup\Filesystem\Interfaces\ExtensionToMimeTypeMapInterface;
 use Cleup\Filesystem\Interfaces\MimeTypeDetectorInterface;
 use finfo;
+
 use const FILEINFO_MIME_TYPE;
 use const PATHINFO_EXTENSION;
 
+/**
+ * MIME type detector using PHP's finfo extension with extension map fallback.
+ */
 class FinfoMimeTypeDetector implements MimeTypeDetectorInterface, ExtensionLookupInterface
 {
-    /**
-     * @var array
-     */
     private const INCONCLUSIVE_MIME_TYPES = [
         'application/x-empty',
         'text/plain',
@@ -24,50 +25,41 @@ class FinfoMimeTypeDetector implements MimeTypeDetectorInterface, ExtensionLooku
         'inode/x-empty',
     ];
 
-    /**
-     * @var finfo
-     */
-    private $finfo;
+    private finfo $finfo;
+    private ExtensionToMimeTypeMapInterface $extensionMap;
+    private ?int $bufferSampleSize;
+
+    /** @var array<int, string> */
+    private array $inconclusiveMimetypes;
 
     /**
-     * @var ExtensionToMimeTypeMapInterface
+     * @param string $magicFile Path to magic database file.
+     * @param ExtensionToMimeTypeMapInterface|null $extensionMap Extension-to-MIME-type map.
+     * @param int|null $bufferSampleSize Maximum bytes to sample from buffer.
+     * @param array<int, string> $inconclusiveMimetypes MIME types considered inconclusive.
      */
-    private $extensionMap;
-
-    /**
-     * @var int|null
-     */
-    private $bufferSampleSize;
-
-    /**
-     * @var array<string>
-     */
-    private $inconclusiveMimetypes;
-
     public function __construct(
         string $magicFile = '',
         ?ExtensionToMimeTypeMapInterface $extensionMap = null,
         ?int $bufferSampleSize = null,
-        array $inconclusiveMimetypes = self::INCONCLUSIVE_MIME_TYPES
+        array $inconclusiveMimetypes = self::INCONCLUSIVE_MIME_TYPES,
     ) {
         $this->finfo = new finfo(FILEINFO_MIME_TYPE, $magicFile);
-        $this->extensionMap = $extensionMap ?: new GeneratedExtensionToMimeTypeMap();
+        $this->extensionMap = $extensionMap ?? new GeneratedExtensionToMimeTypeMap();
         $this->bufferSampleSize = $bufferSampleSize;
         $this->inconclusiveMimetypes = $inconclusiveMimetypes;
     }
 
     /**
-     * @param string $path
-     * @param string|resource $contents
-     * @return ?string
+     * @inheritDoc
      */
-    public function detectMimeType($path, $contents)
+    public function detectMimeType(string $path, mixed $contents): ?string
     {
         $mimeType = is_string($contents)
             ? (@$this->finfo->buffer($this->takeSample($contents)) ?: null)
             : null;
 
-        if ($mimeType !== null && ! in_array($mimeType, $this->inconclusiveMimetypes)) {
+        if ($mimeType !== null && ! in_array($mimeType, $this->inconclusiveMimetypes, true)) {
             return $mimeType;
         }
 
@@ -75,10 +67,9 @@ class FinfoMimeTypeDetector implements MimeTypeDetectorInterface, ExtensionLooku
     }
 
     /**
-     * @param string $path
-     * @return ?string
+     * @inheritDoc
      */
-    public function detectMimeTypeFromPath($path)
+    public function detectMimeTypeFromPath(string $path): ?string
     {
         $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
 
@@ -86,37 +77,40 @@ class FinfoMimeTypeDetector implements MimeTypeDetectorInterface, ExtensionLooku
     }
 
     /**
-     * @param string $path
-     * @return ?string
+     * @inheritDoc
      */
-    public function detectMimeTypeFromFile($path)
+    public function detectMimeTypeFromFile(string $path): ?string
     {
         return @$this->finfo->file($path) ?: null;
     }
 
     /**
-     * @param string $contents
-     * @return ?string
+     * @inheritDoc
      */
-    public function detectMimeTypeFromBuffer($contents)
+    public function detectMimeTypeFromBuffer(string $contents): ?string
     {
         return @$this->finfo->buffer($this->takeSample($contents)) ?: null;
     }
 
+    /**
+     * Take a sample from the content buffer if a sample size is configured.
+     *
+     * @param string $contents
+     * @return string
+     */
     private function takeSample(string $contents): string
     {
         if ($this->bufferSampleSize === null) {
             return $contents;
         }
 
-        return (string) substr($contents, 0, $this->bufferSampleSize);
+        return substr($contents, 0, $this->bufferSampleSize);
     }
 
     /**
-     * @param string $mimetype
-     * @return ?string
+     * @inheritDoc
      */
-    public function lookupExtension($mimetype)
+    public function lookupExtension(string $mimetype): ?string
     {
         return $this->extensionMap instanceof ExtensionLookupInterface
             ? $this->extensionMap->lookupExtension($mimetype)
@@ -124,10 +118,9 @@ class FinfoMimeTypeDetector implements MimeTypeDetectorInterface, ExtensionLooku
     }
 
     /**
-     * @param string $mimetype
-     * @return array
+     * @inheritDoc
      */
-    public function lookupAllExtensions($mimetype)
+    public function lookupAllExtensions(string $mimetype): array
     {
         return $this->extensionMap instanceof ExtensionLookupInterface
             ? $this->extensionMap->lookupAllExtensions($mimetype)

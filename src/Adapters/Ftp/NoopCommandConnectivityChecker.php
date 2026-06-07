@@ -8,19 +8,29 @@ use Cleup\Filesystem\Interfaces\FtpConnectivityCheckerInterface;
 use TypeError;
 use ValueError;
 
+/**
+ * Checks FTP connection liveness by sending a NOOP command.
+ * Used by the file upload library to verify connections are still alive before file operations.
+ */
 class NoopCommandConnectivityChecker implements FtpConnectivityCheckerInterface
 {
-    public function isConnected($connection): bool
+    /**
+     * Test if the FTP connection is still active by sending a NOOP command.
+     *
+     * @param resource|\FTP\Connection $connection The FTP connection to check.
+     * @return bool True if the connection responds with code 200.
+     */
+    public function isConnected(mixed $connection): bool
     {
-        // @codeCoverageIgnoreStart
         try {
             $response = @ftp_raw($connection, 'NOOP');
-        } catch (TypeError | ValueError $typeError) {
+        } catch (TypeError | ValueError) {
             return false;
         }
-        // @codeCoverageIgnoreEnd
 
-        $responseCode = $response ? (int) preg_replace('/\D/', '', implode('', $response)) : false;
+        $responseCode = $response !== null && $response !== []
+            ? (int) preg_replace('/\D/', '', implode('', $response))
+            : false;
 
         return $responseCode === 200;
     }

@@ -4,16 +4,6 @@ declare(strict_types=1);
 
 namespace Cleup\Filesystem\Adapters\Local;
 
-use const DIRECTORY_SEPARATOR;
-use const LOCK_EX;
-use DirectoryIterator;
-use FilesystemIterator;
-use Generator;
-use Cleup\Filesystem\Finder\DirectoryAttributes;
-use Cleup\Filesystem\Finder\FileAttributes;
-use Cleup\Filesystem\Interfaces\AdapterInterface;
-use Cleup\Filesystem\Support\PathPrefixer;
-use Cleup\Filesystem\Exceptions\SymbolicLinkEncounteredException;
 use Cleup\Filesystem\Exceptions\CopyFileException;
 use Cleup\Filesystem\Exceptions\CreateDirectoryException;
 use Cleup\Filesystem\Exceptions\DeleteDirectoryException;
@@ -22,16 +12,27 @@ use Cleup\Filesystem\Exceptions\MoveFileException;
 use Cleup\Filesystem\Exceptions\ReadFileException;
 use Cleup\Filesystem\Exceptions\RetrieveMetadataException;
 use Cleup\Filesystem\Exceptions\SetVisibilityException;
+use Cleup\Filesystem\Exceptions\SymbolicLinkEncounteredException;
 use Cleup\Filesystem\Exceptions\WriteFileException;
 use Cleup\Filesystem\Filesystem;
-use Cleup\Filesystem\Support\VisibilityConverter;
+use Cleup\Filesystem\Finder\DirectoryAttributes;
+use Cleup\Filesystem\Finder\FileAttributes;
+use Cleup\Filesystem\Interfaces\AdapterInterface;
+use Cleup\Filesystem\Interfaces\MimeTypeDetectorInterface;
 use Cleup\Filesystem\Interfaces\VisibilityConverterInterface;
 use Cleup\Filesystem\Support\MimeType\FinfoMimeTypeDetector;
-use Cleup\Filesystem\Interfaces\MimeTypeDetectorInterface;
+use Cleup\Filesystem\Support\PathPrefixer;
+use Cleup\Filesystem\Support\VisibilityConverter;
+use DirectoryIterator;
+use FilesystemIterator;
+use Generator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use SplFileInfo;
 use Throwable;
+
+use const DIRECTORY_SEPARATOR;
+use const LOCK_EX;
 use function chmod;
 use function clearstatcache;
 use function dirname;
@@ -44,16 +45,18 @@ use function is_file;
 use function mkdir;
 use function rename;
 
+/**
+ * Local filesystem adapter for file upload/download operations.
+ * Provides local file storage interaction through the unified AdapterInterface.
+ *
+ * @inheritDoc
+ */
 class LocalAdapter implements AdapterInterface
 {
-    /**
-     * @var int
-     */
+    /** @var int */
     public const SKIP_LINKS = 0001;
 
-    /**
-     * @var int
-     */
+    /** @var int */
     public const DISALLOW_LINKS = 0002;
 
     private PathPrefixer $prefixer;
@@ -63,26 +66,37 @@ class LocalAdapter implements AdapterInterface
     private bool $disableRootLocation = false;
     private bool $finderMimeTypeDetect = false;
 
+    /**
+     * @param string|null $location Root directory path, or null for no root.
+     * @param VisibilityConverterInterface|null $visibility Visibility converter.
+     * @param int $writeFlags File write flags (e.g., LOCK_EX).
+     * @param int $linkHandling How to handle symbolic links.
+     * @param MimeTypeDetectorInterface|null $mimeTypeDetector MIME type detector.
+     * @param bool $finderMimeTypeDetect Whether to detect MIME types during directory listing.
+     */
     public function __construct(
-        string | null $location = null,
+        ?string $location = null,
         ?VisibilityConverterInterface $visibility = null,
         private int $writeFlags = LOCK_EX,
         private int $linkHandling = self::DISALLOW_LINKS,
         ?MimeTypeDetectorInterface $mimeTypeDetector = null,
-        $finderMimeTypeDetect = false
+        bool $finderMimeTypeDetect = false,
     ) {
-        $this->prefixer = new PathPrefixer($location, DIRECTORY_SEPARATOR);
-        $visibility ??= new VisibilityConverter();
-        $this->visibility = $visibility;
-        $this->rootLocation = $location;
+        $this->prefixer = new PathPrefixer($location ?? '', DIRECTORY_SEPARATOR);
+        $this->visibility = $visibility ?? new VisibilityConverter();
+        $this->rootLocation = $location ?? '';
         $this->mimeTypeDetector = $mimeTypeDetector ?? new FinfoMimeTypeDetector();
 
-        if (empty($location))
+        if ($location === null || $location === '') {
             $this->disableRootLocation = true;
+        }
 
         $this->finderMimeTypeDetect = $finderMimeTypeDetect;
     }
 
+    /**
+     * Ensure the root directory exists.
+     */
     private function ensureRootDirectoryExists(): void
     {
         if ($this->disableRootLocation) {
@@ -92,20 +106,31 @@ class LocalAdapter implements AdapterInterface
         $this->ensureDirectoryExists($this->rootLocation, $this->visibility->defaultForDirectories());
     }
 
-    public function put($path, $contents, $config = []): void
-    {
-        $this->upload($path, $contents, $config);
-    }
-
-    public function writeStream($path, $contents, $config = []): void
+    /**
+     * @inheritDoc
+     */
+    public function put(string $path, mixed $contents, array $config = []): void
     {
         $this->upload($path, $contents, $config);
     }
 
     /**
-     * @param resource|string $contents
+     * @inheritDoc
      */
-    private function upload(string $path, $contents, $config = []): void
+    public function writeStream(string $path, mixed $contents, array $config = []): void
+    {
+        $this->upload($path, $contents, $config);
+    }
+
+    /**
+     * Upload contents to a file.
+     *
+     * @param string $path
+     * @param resource|string $contents
+     * @param array<string, mixed> $config
+     * @throws WriteFileException
+     */
+    private function upload(string $path, mixed $contents, array $config = []): void
     {
         $prefixedLocation = $this->prefixer->prefixPath($path);
         $this->ensureRootDirectoryExists();
@@ -121,12 +146,17 @@ class LocalAdapter implements AdapterInterface
             throw WriteFileException::atLocation($path, error_get_last()['message'] ?? '');
         }
 
-        if ($visibility = ($config[Filesystem::OPTION_VISIBILITY] ?? null)) {
+        $visibility = $config[Filesystem::OPTION_VISIBILITY] ?? null;
+
+        if ($visibility !== null) {
             $this->setVisibility($path, (string) $visibility);
         }
     }
 
-    public function delete($path): void
+    /**
+     * @inheritDoc
+     */
+    public function delete(string $path): void
     {
         $location = $this->prefixer->prefixPath($path);
 
@@ -141,9 +171,12 @@ class LocalAdapter implements AdapterInterface
         }
     }
 
-    public function deleteDirectory($prefix): void
+    /**
+     * @inheritDoc
+     */
+    public function deleteDirectory(string $path): void
     {
-        $location = $this->prefixer->prefixPath($prefix);
+        $location = $this->prefixer->prefixPath($path);
 
         if (! is_dir($location)) {
             return;
@@ -154,17 +187,24 @@ class LocalAdapter implements AdapterInterface
         /** @var SplFileInfo $file */
         foreach ($contents as $file) {
             if (! $this->deleteFileInfoObject($file)) {
-                throw DeleteDirectoryException::atLocation($prefix, "Unable to delete file at " . $file->getPathname());
+                throw DeleteDirectoryException::atLocation($path, "Unable to delete file at " . $file->getPathname());
             }
         }
 
         unset($contents);
 
         if (! @rmdir($location)) {
-            throw DeleteDirectoryException::atLocation($prefix, error_get_last()['message'] ?? '');
+            throw DeleteDirectoryException::atLocation($path, error_get_last()['message'] ?? '');
         }
     }
 
+    /**
+     * Recursively list directory contents.
+     *
+     * @param string $path
+     * @param int $mode Iterator mode.
+     * @return Generator<SplFileInfo>
+     */
     private function listDirectoryRecursively(
         string $path,
         int $mode = RecursiveIteratorIterator::SELF_FIRST
@@ -179,6 +219,12 @@ class LocalAdapter implements AdapterInterface
         );
     }
 
+    /**
+     * Delete a file, directory, or symlink.
+     *
+     * @param SplFileInfo $file
+     * @return bool
+     */
     protected function deleteFileInfoObject(SplFileInfo $file): bool
     {
         switch ($file->getType()) {
@@ -191,7 +237,10 @@ class LocalAdapter implements AdapterInterface
         }
     }
 
-    public function finder($path, $deep): iterable
+    /**
+     * @inheritDoc
+     */
+    public function finder(string $path, bool $deep): Generator
     {
         $location = $this->prefixer->prefixPath($path);
 
@@ -218,21 +267,25 @@ class LocalAdapter implements AdapterInterface
                 $isDirectory = $fileInfo->isDir();
 
                 $permissions = octdec(substr(sprintf('%o', $fileInfo->getPerms()), -4));
-                $visibility = $isDirectory ? $this->visibility->inverseForDirectory($permissions) : $this->visibility->inverseForFile($permissions);
+                $visibility = $isDirectory
+                    ? $this->visibility->inverseForDirectory($permissions)
+                    : $this->visibility->inverseForFile($permissions);
 
-                yield $isDirectory ? new DirectoryAttributes(
-                    str_replace('\\', '/', $path),
-                    $visibility,
-                    $lastModified
-                ) : new FileAttributes(
-                    str_replace('\\', '/', $path),
-                    $fileInfo->getSize(),
-                    $visibility,
-                    $lastModified,
-                    $this->finderMimeTypeDetect
-                        ? $this->mimeTypeDetector->detectMimeTypeFromFile((str_replace('\\', '/', $path)))
-                        : null
-                );
+                yield $isDirectory
+                    ? new DirectoryAttributes(
+                        str_replace('\\', '/', $path),
+                        $visibility,
+                        $lastModified
+                    )
+                    : new FileAttributes(
+                        str_replace('\\', '/', $path),
+                        $fileInfo->getSize(),
+                        $visibility,
+                        $lastModified,
+                        $this->finderMimeTypeDetect
+                            ? $this->mimeTypeDetector->detectMimeTypeFromFile(str_replace('\\', '/', $path))
+                            : null
+                    );
             } catch (Throwable $exception) {
                 if (file_exists($pathName)) {
                     throw $exception;
@@ -241,7 +294,10 @@ class LocalAdapter implements AdapterInterface
         }
     }
 
-    public function move($from, $to, $config = []): void
+    /**
+     * @inheritDoc
+     */
+    public function move(string $from, string $to, array $config = []): void
     {
         $sourcePath = $this->prefixer->prefixPath($from);
         $destinationPath = $this->prefixer->prefixPath($to);
@@ -258,15 +314,20 @@ class LocalAdapter implements AdapterInterface
             throw MoveFileException::because(error_get_last()['message'] ?? 'unknown reason', $from, $to);
         }
 
-        if ($visibility = ($config[Filesystem::OPTION_VISIBILITY] ?? null)) {
+        $visibility = $config[Filesystem::OPTION_VISIBILITY] ?? null;
+
+        if ($visibility !== null) {
             $this->setVisibility($to, (string) $visibility);
         }
     }
 
-    public function copy($from, $destination, $config = []): void
+    /**
+     * @inheritDoc
+     */
+    public function copy(string $from, string $to, array $config = []): void
     {
         $sourcePath = $this->prefixer->prefixPath($from);
-        $destinationPath = $this->prefixer->prefixPath($destination);
+        $destinationPath = $this->prefixer->prefixPath($to);
         $this->ensureRootDirectoryExists();
         $this->ensureDirectoryExists(
             dirname($destinationPath),
@@ -274,7 +335,7 @@ class LocalAdapter implements AdapterInterface
         );
 
         if ($sourcePath !== $destinationPath && ! @copy($sourcePath, $destinationPath)) {
-            throw CopyFileException::because(error_get_last()['message'] ?? 'unknown', $from, $destination);
+            throw CopyFileException::because(error_get_last()['message'] ?? 'unknown', $from, $to);
         }
 
         $defaultVisibility = ($config[Filesystem::OPTION_RETAIN_VISIBILITY] ?? true)
@@ -283,12 +344,15 @@ class LocalAdapter implements AdapterInterface
 
         $visibility = $config[Filesystem::OPTION_VISIBILITY] ?? $defaultVisibility;
 
-        if ($visibility) {
-            $this->setVisibility($destination, (string) $visibility);
+        if ($visibility !== null) {
+            $this->setVisibility($to, (string) $visibility);
         }
     }
 
-    public function get($path): string
+    /**
+     * @inheritDoc
+     */
+    public function get(string $path): string
     {
         $location = $this->prefixer->prefixPath($path);
         error_clear_last();
@@ -301,7 +365,10 @@ class LocalAdapter implements AdapterInterface
         return $contents;
     }
 
-    public function readStream($path)
+    /**
+     * @inheritDoc
+     */
+    public function readStream(string $path): mixed
     {
         $location = $this->prefixer->prefixPath($path);
         error_clear_last();
@@ -314,6 +381,13 @@ class LocalAdapter implements AdapterInterface
         return $contents;
     }
 
+    /**
+     * Ensure a directory exists, creating it with the given visibility if needed.
+     *
+     * @param string $dirname
+     * @param int $visibility
+     * @throws CreateDirectoryException
+     */
     protected function ensureDirectoryExists(string $dirname, int $visibility): void
     {
         if (is_dir($dirname)) {
@@ -335,21 +409,30 @@ class LocalAdapter implements AdapterInterface
         }
     }
 
-    public function fileExists($location): bool
+    /**
+     * @inheritDoc
+     */
+    public function fileExists(string $path): bool
     {
-        $location = $this->prefixer->prefixPath($location);
+        $location = $this->prefixer->prefixPath($path);
 
         return is_file($location);
     }
 
-    public function directoryExists($path): bool
+    /**
+     * @inheritDoc
+     */
+    public function directoryExists(string $path): bool
     {
         $path = $this->prefixer->prefixPath($path);
 
         return is_dir($path);
     }
 
-    public function createDirectory($path, $config = []): void
+    /**
+     * @inheritDoc
+     */
+    public function createDirectory(string $path, array $config = []): void
     {
         $this->ensureRootDirectoryExists();
         $location = $this->prefixer->prefixPath($path);
@@ -372,17 +455,23 @@ class LocalAdapter implements AdapterInterface
         }
     }
 
-    public function setVisibility($path, $visibility): void
+    /**
+     * @inheritDoc
+     */
+    public function setVisibility(string $path, string $visibility): void
     {
         $path = $this->prefixer->prefixPath($path);
-        $visibility = is_dir($path) ? $this->visibility->forDirectory($visibility) : $this->visibility->forFile(
-            $visibility
-        );
+        $visibility = is_dir($path)
+            ? $this->visibility->forDirectory($visibility)
+            : $this->visibility->forFile($visibility);
 
         $this->setPermissions($path, $visibility);
     }
 
-    public function getVisibility($path): FileAttributes
+    /**
+     * @inheritDoc
+     */
+    public function getVisibility(string $path): FileAttributes
     {
         $location = $this->prefixer->prefixPath($path);
         clearstatcache(false, $location);
@@ -399,14 +488,23 @@ class LocalAdapter implements AdapterInterface
         return new FileAttributes($path, null, $visibility);
     }
 
+    /**
+     * Resolve directory visibility, falling back to default.
+     *
+     * @param string|null $visibility
+     * @return int
+     */
     private function resolveDirectoryVisibility(?string $visibility): int
     {
-        return $visibility === null ? $this->visibility->defaultForDirectories() : $this->visibility->forDirectory(
-            $visibility
-        );
+        return $visibility === null
+            ? $this->visibility->defaultForDirectories()
+            : $this->visibility->forDirectory($visibility);
     }
 
-    public function mimeType($path): FileAttributes
+    /**
+     * @inheritDoc
+     */
+    public function mimeType(string $path): FileAttributes
     {
         $location = $this->prefixer->prefixPath($path);
         error_clear_last();
@@ -424,7 +522,10 @@ class LocalAdapter implements AdapterInterface
         return new FileAttributes($path, null, null, null, $mimeType);
     }
 
-    public function lastModified($path): FileAttributes
+    /**
+     * @inheritDoc
+     */
+    public function lastModified(string $path): FileAttributes
     {
         $location = $this->prefixer->prefixPath($path);
         error_clear_last();
@@ -437,7 +538,10 @@ class LocalAdapter implements AdapterInterface
         return new FileAttributes($path, null, null, $lastModified);
     }
 
-    public function size($path): FileAttributes
+    /**
+     * @inheritDoc
+     */
+    public function size(string $path): FileAttributes
     {
         $location = $this->prefixer->prefixPath($path);
         error_clear_last();
@@ -449,6 +553,12 @@ class LocalAdapter implements AdapterInterface
         throw RetrieveMetadataException::size($path, error_get_last()['message'] ?? '');
     }
 
+    /**
+     * List contents of a single directory (non-recursive).
+     *
+     * @param string $location
+     * @return Generator<SplFileInfo>
+     */
     private function listDirectory(string $location): Generator
     {
         $iterator = new DirectoryIterator($location);
@@ -462,9 +572,17 @@ class LocalAdapter implements AdapterInterface
         }
     }
 
+    /**
+     * Set file/directory permissions.
+     *
+     * @param string $location
+     * @param int $visibility
+     * @throws SetVisibilityException
+     */
     private function setPermissions(string $location, int $visibility): void
     {
         error_clear_last();
+
         if (! @chmod($location, $visibility)) {
             $extraMessage = error_get_last()['message'] ?? '';
             throw SetVisibilityException::atLocation($this->prefixer->stripPrefix($location), $extraMessage);

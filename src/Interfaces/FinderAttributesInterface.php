@@ -7,97 +7,101 @@ namespace Cleup\Filesystem\Interfaces;
 use ArrayAccess;
 use JsonSerializable;
 
+/**
+ * Interface for file/directory attributes objects.
+ * Used by the file upload library to represent filesystem entries in listings.
+ */
 interface FinderAttributesInterface extends JsonSerializable, ArrayAccess
 {
-    /**
-     * @var string
-     */
+    /** @var string */
     public const ATTRIBUTE_PATH = 'path';
 
-    /**
-     * @var string
-     */
+    /** @var string */
     public const ATTRIBUTE_TYPE = 'type';
 
-    /**
-     * @var string
-     */
+    /** @var string */
     public const ATTRIBUTE_FILE_SIZE = 'file_size';
 
-    /**
-     * @var string
-     */
+    /** @var string */
     public const ATTRIBUTE_VISIBILITY = 'visibility';
 
-    /**
-     * @var string
-     */
+    /** @var string */
     public const ATTRIBUTE_LAST_MODIFIED = 'last_modified';
 
-    /**
-     * @var string
-     */
+    /** @var string */
     public const ATTRIBUTE_MIME_TYPE = 'mime_type';
 
-    /**
-     * @var string
-     */
+    /** @var string */
     public const ATTRIBUTE_EXTRA_METADATA = 'extra_metadata';
 
-    /**
-     * @var string
-     */
+    /** @var string */
     public const TYPE_FILE = 'file';
 
-    /**
-     * @var string
-     */
+    /** @var string */
     public const TYPE_DIRECTORY = 'dir';
 
     /**
+     * Get the path of the entry.
+     *
      * @return string
      */
-    public function path();
+    public function path(): string;
 
     /**
+     * Get the type of the entry ("file" or "dir").
+     *
      * @return string
      */
-    public function type();
+    public function type(): string;
 
     /**
-     * @return string
+     * Get the visibility of the entry.
+     *
+     * @return string|null
      */
-    public function getVisibility();
+    public function getVisibility(): ?string;
 
     /**
-     * @return ?int
+     * Get the last modified timestamp.
+     *
+     * @return int|null
      */
-    public function lastModified();
+    public function lastModified(): ?int;
 
     /**
-     * @param array $attributes
+     * Create an instance from an array of attributes.
+     *
+     * @param array<string, mixed> $attributes
      * @return static
      */
-    public static function fromArray($attributes);
+    public static function fromArray(array $attributes): static;
 
     /**
+     * Check if this entry is a file.
+     *
      * @return bool
      */
-    public function isFile();
+    public function isFile(): bool;
 
     /**
+     * Check if this entry is a directory.
+     *
      * @return bool
      */
-    public function isDir();
+    public function isDir(): bool;
 
     /**
-     * @param string $path
+     * Create a copy with a different path.
+     *
+     * @param string $path New path.
      * @return static
      */
-    public function withPath($path);
+    public function withPath(string $path): static;
 
     /**
-     * @return array
+     * Get extra metadata associated with this entry.
+     *
+     * @return array<string, mixed>
      */
-    public function extraMetadata();
+    public function extraMetadata(): array;
 }

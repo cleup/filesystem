@@ -7,9 +7,11 @@ namespace Cleup\Filesystem\Interfaces;
 use phpseclib3\Net\SFTP;
 
 /**
- * @method void disconnect()
+ * Provides and manages SFTP connections.
  */
 interface SftpConnectionProviderInterface
 {
     public function provideConnection(): SFTP;
+
+    public function disconnect(): void;
 }

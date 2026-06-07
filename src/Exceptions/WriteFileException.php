@@ -7,30 +7,44 @@ namespace Cleup\Filesystem\Exceptions;
 use RuntimeException;
 use Throwable;
 
+use function rtrim;
+
+/**
+ * Exception thrown when a file write operation fails.
+ * Used by the file upload library for local, FTP, and SFTP adapters.
+ */
 final class WriteFileException extends RuntimeException
 {
-    /**
-     * @var string
-     */
-    private $path = '';
+    private string $path = '';
+    private string $reason = '';
 
     /**
-     * @var string
+     * @param string $message Error message.
+     * @param int $code Error code.
+     * @param Throwable|null $previous Previous exception.
      */
-    private $reason;
+    public function __construct(
+        string $message = "",
+        int $code = 0,
+        ?Throwable $previous = null,
+    ) {
+        parent::__construct($message, $code, $previous);
+    }
 
     /**
-     * @param string $path
-     * @param string $reason
-     * @param ?Throwable $previous
+     * Create an exception for a failed file write at a specific path.
+     *
+     * @param string $path The file path.
+     * @param string $reason Additional reason for the failure.
+     * @param Throwable|null $previous Previous exception.
      * @return static
      */
-    public static function atLocation($path, $reason = '', $previous = null)
+    public static function atLocation(string $path, string $reason = '', ?Throwable $previous = null): static
     {
         $e = new static(
             rtrim("Unable to write file at path: {$path}. {$reason}"),
             0,
-            $previous
+            $previous,
         );
         $e->path = $path;
         $e->reason = $reason;
@@ -39,25 +53,31 @@ final class WriteFileException extends RuntimeException
     }
 
     /**
+     * Get the operation type for this exception.
+     *
      * @return string
      */
-    public function operation()
+    public function operation(): string
     {
         return "WRITE";
     }
 
     /**
+     * Get the reason for the failure.
+     *
      * @return string
      */
-    public function reason()
+    public function reason(): string
     {
         return $this->reason;
     }
 
     /**
+     * Get the file path that failed.
+     *
      * @return string
      */
-    public function path()
+    public function path(): string
     {
         return $this->path;
     }

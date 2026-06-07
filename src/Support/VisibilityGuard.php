@@ -7,13 +7,19 @@ namespace Cleup\Filesystem\Support;
 use Cleup\Filesystem\Exceptions\InvalidVisibilityProvidedException;
 use Cleup\Filesystem\Filesystem;
 
+/**
+ * Guards against invalid visibility values.
+ */
 final class VisibilityGuard
 {
     /**
+     * Validate that the given visibility is either "public" or "private".
+     *
      * @param string $visibility
      * @return void
+     * @throws InvalidVisibilityProvidedException
      */
-    public static function guardAgainstInvalidInput($visibility)
+    public static function guardAgainstInvalidInput(string $visibility): void
     {
         if (
             $visibility !== Filesystem::VISIBILITY_PUBLIC &&
