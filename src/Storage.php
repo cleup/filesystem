@@ -395,8 +395,12 @@ class Storage
      * @param bool $isPrepared
      * @return array<string, mixed>
      */
-    public static function prepareUpload(array $files = [], array $params = [], bool $isPrepared = false): array
-    {
+    public static function prepareUpload(
+        array $files = [],
+        array $params = [],
+        bool $isPrepared = false,
+        ?callable $onProcess = null
+    ): array {
         $errors = [];
         $allFiles = [];
         $toUpload = [];
@@ -445,6 +449,18 @@ class Storage
                                 $toUpload[] = $file;
                             }
                         }
+
+                        if ($onProcess && is_callable($onProcess)) {
+                            $onProcess(
+                                $file,
+                                $params,
+                                $key,
+                                $errors,
+                                $toUpload,
+                                $allFiles,
+                                $isPrepared
+                            );
+                        }
                     }
 
                     return [
@@ -455,7 +471,7 @@ class Storage
                     ];
                 }
             } else {
-                return static::prepareUpload($files, $params, true);
+                return static::prepareUpload($files, $params, true, $onProcess);
             }
         }
 
