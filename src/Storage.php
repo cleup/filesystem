@@ -431,6 +431,8 @@ class Storage
                                 ? static::getRealSize($file['tmp_name'])
                                 : $file['size'];
 
+                            $file['originalKey'] = $key;
+
                             if (!$params['allowUpload']) {
                                 static::addResponseError($errors, 'upload_is_not_available', $key, $file['name']);
                             } elseif (empty($params['multiple']) && $key > 0) {
