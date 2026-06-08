@@ -399,7 +399,8 @@ class Storage
         array $files = [],
         array $params = [],
         bool $isPrepared = false,
-        ?callable $onProcess = null
+        ?callable $onStartProcess = null,
+        ?callable $onEndProcess = null
     ): array {
         $errors = [];
         $allFiles = [];
@@ -424,6 +425,18 @@ class Storage
 
                 if (!empty($allFiles)) {
                     foreach ($allFiles as $key => $file) {
+                        if ($onStartProcess && is_callable($onStartProcess)) {
+                            $onStartProcess(
+                                $file,
+                                $params,
+                                $key,
+                                $errors,
+                                $toUpload,
+                                $allFiles,
+                                $isPrepared
+                            );
+                        }
+
                         if (!file_exists($file['tmp_name'])) {
                             static::addResponseError($errors, 'file_not_found', $key, $file['name']);
                         } else {
@@ -452,8 +465,8 @@ class Storage
                             }
                         }
 
-                        if ($onProcess && is_callable($onProcess)) {
-                            $onProcess(
+                        if ($onEndProcess && is_callable($onEndProcess)) {
+                            $onEndProcess(
                                 $file,
                                 $params,
                                 $key,
@@ -473,7 +486,7 @@ class Storage
                     ];
                 }
             } else {
-                return static::prepareUpload($files, $params, true, $onProcess);
+                return static::prepareUpload($files, $params, true, $onStartProcess, $onEndProcess);
             }
         }
 
