@@ -424,7 +424,7 @@ class Storage
                     : static::sanitizeFileVariables($files);
 
                 if (!empty($allFiles)) {
-                    foreach ($allFiles as $key => $file) {
+                    foreach ($allFiles as $key => &$file) {
                         if ($onStartProcess && is_callable($onStartProcess)) {
                             $onStartProcess(
                                 $file,
@@ -477,6 +477,8 @@ class Storage
                             );
                         }
                     }
+
+                    unset($file);
 
                     return [
                         'status' => empty($errors),
