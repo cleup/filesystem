@@ -133,7 +133,30 @@ class Storage
      */
     public static function sanitizeName(string $filename): string
     {
-        $chars = ['\\', '/', ':', '*', '?', '"', '<', '>', '|', '+', ' ', '%', '!', '@', '&', '$', '#', '`', ';', '(', ')', chr(0)];
+        $chars = [
+            '\\',
+            '/',
+            ':',
+            '*',
+            '?',
+            '"',
+            '<',
+            '>',
+            '|',
+            '+',
+            ' ',
+            '%',
+            '!',
+            '@',
+            '&',
+            '$',
+            '#',
+            '`',
+            ';',
+            '(',
+            ')',
+            chr(0)
+        ];
         $filename = preg_replace("#\x{00a0}#siu", ' ', $filename);
 
         return str_replace($chars, '_', $filename);
@@ -151,15 +174,18 @@ class Storage
         $files = static::formatFileVariables($files);
 
         foreach ($files as $key => $value) {
-            $result[$key] = [
+            $result[$key] =  [
                 'name' => static::sanitizeName(
                     static::toString($value['name'])
                 ),
                 "full_path" => static::toString($value['full_path']),
                 "tmp_name" => static::toString($value['tmp_name']),
-                "size" => (int) $value['size'],
-                "error" => (int) $value['error'],
-                "type" => static::toString($value['type'])
+                "size" => intval($value['size']),
+                "error" => intval($value['error']),
+                "type" => static::toString($value['type']),
+                'sort' => (isset($value['sort']) && !is_null($value['sort']))
+                    ?  intval($value['sort'])
+                    : null
             ];
         }
 
@@ -414,7 +440,8 @@ class Storage
             'multiple' => false,
             'limit' => static::getConfig('limit', 5),
             'allowUpload' => static::getConfig('allowUpload', true),
-            'calculateRealSize' => true
+            'calculateRealSize' => true,
+            'sort' => null
         ], $params);
 
         if (is_array($files) && !empty($files)) {
@@ -445,6 +472,20 @@ class Storage
                                 : $file['size'];
 
                             $file['originalKey'] = $key;
+
+                            if (!is_null($params['sort'])) {
+                                $file['sort'] = 0;
+
+                                if (is_array($params['sort'])) {
+                                    foreach ($params['sort'] as $sortKey => $sortItem) {
+                                        if ($key === $sortKey) {
+                                            $file['sort'] = intval($sortItem);
+                                        }
+                                    }
+                                } else {
+                                    $file['sort'] = intval($params['sort']);
+                                }
+                            }
 
                             if (!$params['allowUpload']) {
                                 static::addResponseError($errors, 'upload_is_not_available', $key, $file['name']);
@@ -545,7 +586,10 @@ class Storage
                             ? $driver->path($path . $name)
                             : static::path($path . $name),
                         'mimeType' => $file['type'],
-                        'size' => $file['size']
+                        'size' => $file['size'],
+                        'sort' => !is_null($file['sort'] ?? null)
+                            ? intval($file['sort'])
+                            : null
                     ];
                 } else {
                     if (static::$debug) {
